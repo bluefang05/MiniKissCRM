@@ -155,64 +155,67 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
   <div class="container">
     <h1><i class="fas fa-address-book"></i> Leads List</h1>
 <div class="actions">
-    <!-- Dashboard Button - Only visible to admin or viewer -->
+    <!-- DASHBOARD SECTION -->
     <?php if ($canViewDashboard): ?>
-        <a class="btn-slide" href="./../admin/dashboard.php" title="Dashboard">
+        <a class="btn-slide" href="../admin/dashboard.php" title="Dashboard">
             <i class="fas fa-tachometer-alt"></i><span> Dashboard</span>
         </a>
     <?php endif; ?>
 
-        <!-- My Metrics Button -->
+    <!-- METRICS SECTION -->
     <?php if ($canViewDashboard): ?>
         <a class="btn-slide" href="../admin/my_metrics.php" title="My Metrics">
             <i class="fas fa-chart-line"></i><span> My Metrics</span>
         </a>
     <?php endif; ?>
 
-    <!-- My Calls Button -->
+    <?php if ($canManageUsers): // Only admin can see this ?>
+        <a class="btn-slide" href="../admin/all_metrics.php" title="All Metrics">
+            <i class="fas fa-chart-pie"></i><span> All Metrics</span>
+        </a>
+    <?php endif; ?>
+
+
+    <!-- CALLS SECTION -->
     <?php if ($canViewCalls): ?>
         <a class="btn-slide" href="../calls/my_interactions.php" title="My Calls">
             <i class="fas fa-phone"></i><span> My Calls</span>
         </a>
-    <?php endif; ?>
 
-    <!-- All Calls Button - Visible only to admin or viewer -->
-    <?php if ($canViewCalls): ?>
         <a class="btn-slide" href="../calls/list.php" title="All Calls">
             <i class="fas fa-phone-alt"></i><span> All Calls</span>
         </a>
     <?php endif; ?>
 
-    <!-- New Lead Button -->
+
+    <!-- LEADS SECTION -->
     <?php if ($canCreate): ?>
-        <a class="btn-slide" href="add.php" title="New">
-            <i class="fas fa-plus"></i><span> New</span>
+        <a class="btn-slide" href="add.php" title="New Lead">
+            <i class="fas fa-plus-circle"></i><span> New Lead</span>
         </a>
     <?php endif; ?>
 
-    <!-- Import Leads Button -->
     <?php if ($canImport): ?>
-        <a class="btn-slide" href="import.php" title="Import">
-            <i class="fas fa-file-import"></i><span> Import</span>
+        <a class="btn-slide" href="import.php" title="Import Leads">
+            <i class="fas fa-file-import"></i><span> Import Leads</span>
         </a>
     <?php endif; ?>
 
-    <!-- Admin: Users Management -->
-    <?php if ($canManageUsers): ?>
-        <a class="btn-slide" href="../admin/users.php" title="Users">
-            <i class="fas fa-users"></i><span> Users</span>
-        </a>
-    <?php endif; ?>
 
-    <!-- Admin: Documents Management -->
+    <!-- ADMIN TOOLS SECTION -->
     <?php if ($canManageUsers): ?>
+        <a class="btn-slide" href="../admin/users.php" title="User Management">
+            <i class="fas fa-users-cog"></i><span> User Management</span>
+        </a>
+
         <a class="btn-slide" href="../admin/documents.php" title="Documents">
             <i class="fas fa-folder-open"></i><span> Documents</span>
         </a>
     <?php endif; ?>
 
-    <!-- Logout -->
-    <a class="btn-slide btn-secondary" href="../auth/logout.php" title="Exit">
+
+    <!-- LOGOUT -->
+    <a class="btn-slide btn-secondary" href="../auth/logout.php" title="Logout">
         <i class="fas fa-right-from-bracket"></i><span> Exit</span>
     </a>
 </div>

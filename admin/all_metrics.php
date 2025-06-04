@@ -1,11 +1,12 @@
 <?php
 /**
- * my_metrics.php
+ * dashboard.php
  *
- * Performance metrics dashboard for sales agents.
- * Shows call stats, graphs, and latest interactions.
+ * Admin dashboard showing performance metrics for all users.
+ * Allows filtering by user.
  *
  * Features:
+ * - Switch between users
  * - Calls Today
  * - Avg Call Duration
  * - Conversion Rate
@@ -17,22 +18,21 @@
  * @package MiniKissCRM
  * @author  Enmanuel Domínguez
  */
-require_once __DIR__.'/../lib/Auth.php';
-require_once __DIR__.'/../lib/db.php';
+require_once __DIR__.'./../lib/Auth.php';
+require_once __DIR__.'./../lib/db.php';
 
 // Authentication check
 if (!Auth::check()) {
-    header('Location: ../auth/login.php');
+    header('Location: auth/login.php');
     exit;
 }
 
 $user = Auth::user();
-$user_id = $user['id'];
 $roles = $user['roles'] ?? [];
 
-// Authorization check – allow admin, viewer, and sales
-if (!array_intersect($roles, ['admin', 'viewer', 'sales'])) {
-    header('Location: ../leads/list.php');
+// Authorization check – only allow admin
+if (!in_array('admin', $roles)) {
+    header('Location: ./../leads/list.php');
     exit;
 }
 
@@ -44,6 +44,9 @@ if (isset($_GET['api'])) {
     $response = ['error' => null, 'data' => []];
     try {
         $pdo = getPDO();
+
+        // Get user_id from query param
+        $user_id = !empty($_GET['user']) ? (int)$_GET['user'] : null;
 
         // Date filter
         $condition = '';
@@ -60,7 +63,11 @@ if (isset($_GET['api'])) {
         }
 
         // Base WHERE clause
-        $baseWhere = "WHERE i.user_id = :user_id AND $condition";
+        $baseWhere = "WHERE ";
+        if ($user_id) {
+            $baseWhere .= "i.user_id = :user_id AND ";
+        }
+        $baseWhere .= $condition;
 
         // KPI Query
         $sql = "
@@ -75,26 +82,33 @@ if (isset($_GET['api'])) {
             $baseWhere
         ";
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([':user_id' => $user_id] + $bind);
+        $params = $user_id ? [':user_id' => $user_id] : [];
+        $params = array_merge($params, $bind);
+        $stmt->execute($params);
         $kpi = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        // Helper function
-        $fn = function(string $q) use ($pdo, $baseWhere, $bind, $user_id) {
-            $q = str_replace(':user_id', '?', $q);
-            $q = str_replace('WHERE 1=1', $baseWhere, $q);
-            $stmt = $pdo->prepare($q);
-            $stmt->execute(array_values($bind));
-            return $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-        };
+        // Day-wise data
+        $daySql = "
+            SELECT DATE(i.created_at) AS d, COUNT(*) AS c 
+            FROM interactions i
+            $baseWhere
+            GROUP BY d 
+            ORDER BY d
+        ";
+        $dayStmt = $pdo->prepare($daySql);
+        $dayStmt->execute($params);
+        $dayData = $dayStmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
-        // Time-series data
-        $dayData = $fn("SELECT DATE(i.created_at) AS d, COUNT(*) AS c FROM interactions i GROUP BY d ORDER BY d");
-        $hourStmt = $pdo->query("
-            SELECT HOUR(created_at) h, COUNT(*) c 
-            FROM interactions 
-            WHERE user_id = $user_id AND DATE(created_at)=CURDATE()
+        // Hour-wise data
+        $hourSql = "
+            SELECT HOUR(i.created_at) AS h, COUNT(*) AS c
+            FROM interactions i
+            $baseWhere
             GROUP BY h
-        ");
+            ORDER BY h
+        ";
+        $hourStmt = $pdo->prepare($hourSql);
+        $hourStmt->execute($params);
         $hourRows = $hourStmt->fetchAll(PDO::FETCH_KEY_PAIR);
         $hourData = array_replace(array_fill(0, 24, 0), $hourRows); // Ensure all hours are present
 
@@ -111,20 +125,22 @@ if (isset($_GET['api'])) {
             $baseWhere
             GROUP BY d.name
         ");
-        $dispStmt->execute([':user_id' => $user_id] + $bind);
+        $dispStmt->execute($params);
         $dispositions = $dispStmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
         // Latest calls table
         $latestCallsStmt = $pdo->prepare("
-            SELECT i.created_at, CONCAT(l.first_name,' ',l.last_name) AS lead_name, d.name AS disposition, i.duration_seconds
+            SELECT i.created_at, CONCAT(l.first_name,' ',l.last_name) AS lead_name, 
+                   d.name AS disposition, i.duration_seconds, u.name AS agent
             FROM interactions i
             JOIN leads l ON l.id = i.lead_id
             JOIN dispositions d ON d.id = i.disposition_id
-            WHERE i.user_id = ?
+            JOIN users u ON u.id = i.user_id
+            $baseWhere
             ORDER BY i.created_at DESC
             LIMIT 6
         ");
-        $latestCallsStmt->execute([$user_id]);
+        $latestCallsStmt->execute($params);
         $latest_calls = $latestCallsStmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Build response
@@ -154,369 +170,155 @@ if (isset($_GET['api'])) {
 /* Fetch latest calls statically (for initial HTML load)               */
 /* ------------------------------------------------------------------ */
 $pdo = getPDO();
-$stmt = $pdo->prepare("
-    SELECT i.created_at, CONCAT(l.first_name,' ',l.last_name) AS lead_name, d.name AS disposition, i.duration_seconds
-    FROM interactions i
-    JOIN leads l ON l.id = i.lead_id
-    JOIN dispositions d ON d.id = i.disposition_id
-    WHERE i.user_id = ?
-    ORDER BY i.created_at DESC
-    LIMIT 6
-");
-$stmt->execute([$user_id]);
-$latest = $stmt->fetchAll();
+$stmt = $pdo->query("SELECT id, name FROM users ORDER BY name");
+$users = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 ?>
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>My Metrics – MiniKissCRM</title>
+<title>Team Dashboard – MiniKissCRM</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="./../assets/css/app.css">
 <style>
-:root {
-    --c-bg: #fff;
-    --c-fg: #222;
-    --c-brand: #2c5d4a;
-    --c-brand-light: #3d7a63;
-    --c-sub: #6c757d;
-    --c-surface: #f8faf9;
-    --c-border: #e0e6e3;
-    --c-card-shadow: rgba(0, 0, 0, 0.05);
-    --c-success: #28a745;
-    --c-warning: #ffc107;
-    --c-danger: #dc3545;
-    --c-info: #17a2b8;
-}
-
-body {
-    margin: 0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: var(--c-surface);
-    color: var(--c-fg);
-    line-height: 1.6;
-}
-
-.container {
-    max-width: 1400px;
-    margin: auto;
-    padding: 1.5rem;
-}
-
-h1, h2, h3 {
-    margin: 0 0 .8rem;
-    font-weight: 600;
-    color: var(--c-brand);
-}
-
-h1 {
-    font-size: 1.8rem;
-}
-
-h2 {
-    font-size: 1.4rem;
-    margin-bottom: 1rem;
-}
-
-h3 {
-    font-size: 1.1rem;
-    color: var(--c-sub);
-    margin-bottom: 0.5rem;
-}
-
-a.btn {
-    display: inline-flex;
-    align-items: center;
-    padding: .5rem 1rem;
-    border-radius: 6px;
-    background: var(--c-brand);
-    color: #fff;
-    text-decoration: none;
-    font-weight: 500;
-    transition: all 0.2s ease;
-    margin-right: 0.5rem;
-    margin-bottom: 1rem;
-    border: 1px solid var(--c-brand-light);
-}
-
-a.btn:hover {
-    background: var(--c-brand-light);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.grid {
+.grid.cards {
     display: grid;
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
 }
-
-.cards {
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-}
-
 .card {
-    background: var(--c-bg);
-    padding: 1.2rem 1.5rem;
-    border-radius: 10px;
-    box-shadow: 0 4px 6px var(--c-card-shadow);
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    padding: 1.25rem;
     text-align: center;
-    border: 1px solid var(--c-border);
-    transition: transform 0.3s ease;
 }
-
-.card:hover {
-    transform: translateY(-5px);
-}
-
 .card h3 {
-    margin: 0 0 .5rem;
-    font-size: 1rem;
-    color: var(--c-sub);
-    font-weight: 500;
+    margin-top: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #555;
 }
-
 .card p {
-    margin: 0;
-    font-size: 2rem;
+    font-size: 1.75rem;
     font-weight: 700;
-    color: var(--c-brand);
+    margin: 0.5rem 0;
 }
-
 .card .subtext {
-    font-size: 0.9rem;
-    color: var(--c-sub);
-    margin-top: 0.3rem;
+    font-size: 0.85rem;
+    color: #777;
 }
-
-.chart-container {
-    background: var(--c-bg);
-    border-radius: 10px;
-    padding: 1.2rem;
-    box-shadow: 0 4px 6px var(--c-card-shadow);
-    border: 1px solid var(--c-border);
-    height: 300px;
-    position: relative;
-}
-
-.chart-container h3 {
-    position: absolute;
-    top: 1rem;
-    left: 1.5rem;
-    z-index: 10;
-    background: var(--c-bg);
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.9rem;
-    color: var(--c-sub);
-}
-
 .controls {
     display: flex;
     flex-wrap: wrap;
-    gap: .5rem;
-    margin: 1.5rem 0;
-    padding: 0.8rem 1rem;
-    background: var(--c-bg);
-    border-radius: 8px;
-    box-shadow: 0 2px 4px var(--c-card-shadow);
-    border: 1px solid var(--c-border);
-}
-
-.range-box {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    flex-wrap: wrap;
-}
-
-.range-box input {
-    padding: .45rem .7rem;
-    border-radius: 6px;
-    border: 1px solid var(--c-border);
-    font-size: 0.9rem;
-}
-
-.controls button {
-    padding: .45rem .8rem;
-    border-radius: 6px;
-    background: var(--c-surface);
-    color: var(--c-sub);
-    border: 1px solid var(--c-border);
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: all 0.2s ease;
-}
-
-.controls button.active, .controls button:hover {
-    background: var(--c-brand);
-    color: white;
-    border-color: var(--c-brand-light);
-}
-
-#applyCustom {
-    background: var(--c-brand);
-    color: white;
-    border-color: var(--c-brand-light);
-}
-
-#applyCustom:hover {
-    background: var(--c-brand-light);
-}
-
-.badge-online {
-    background: var(--c-success);
-    color: #fff;
-    padding: .15rem .5rem;
-    border-radius: 4px;
-    margin-left: .4rem;
-    font-size: .8rem;
-}
-
-.export-buttons {
-    display: flex;
-    gap: 0.5rem;
-    margin-top: 0;
-    margin-left: auto;
-}
-
-.export-buttons button {
-    background: var(--c-info);
-    color: white;
-    border: none;
-    padding: 0.45rem 0.8rem;
-}
-
-.export-buttons button:hover {
-    background: #138496;
-}
-
-.charts-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-    gap: 1.5rem;
+    justify-content: space-between;
+    gap: 1rem;
     margin-bottom: 1.5rem;
 }
-
-.latest-calls-container {
-    background: var(--c-bg);
-    border-radius: 10px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 6px var(--c-card-shadow);
-    border: 1px solid var(--c-border);
-    overflow: hidden;
+.range-box {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
 }
-
+.range-box button.rng {
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.range-box button.rng.active {
+    background: #4a86e8;
+    color: white;
+    border-color: #4a86e8;
+}
+.range-box input {
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    width: 120px;
+}
+.range-box button#applyCustom {
+    padding: 0.5rem 1rem;
+    background: #4a86e8;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+.chart-container {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    padding: 1.25rem;
+}
+.chart-container h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+}
+.chart-container canvas {
+    width: 100% !important;
+    height: 300px !important;
+}
+.latest-calls-container {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+.latest-calls-container h2 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-size: 1.3rem;
+}
 table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 0.5rem;
 }
-
-table th {
-    background: var(--c-surface);
+table th, table td {
+    padding: 0.75rem;
     text-align: left;
-    padding: 0.8rem 1rem;
+    border-bottom: 1px solid #eee;
+}
+table th {
     font-weight: 600;
-    color: var(--c-sub);
-    font-size: 0.9rem;
-    border-bottom: 1px solid var(--c-border);
+    color: #555;
 }
-
-table td {
-    padding: 0.8rem 1rem;
-    border-bottom: 1px solid var(--c-border);
-    font-size: 0.95rem;
-}
-
-table tr:last-child td {
-    border-bottom: none;
-}
-
 table tr:hover td {
-    background: rgba(44, 93, 74, 0.03);
+    background-color: #f9f9f9;
 }
-
 .duration-cell {
-    font-weight: 500;
-    color: var(--c-brand);
-}
-
-@media screen and (max-width: 1100px) {
-    .charts-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .chart-container {
-        height: 280px;
-    }
-}
-
-@media screen and (max-width: 768px) {
-    .container {
-        padding: 1rem;
-    }
-    
-    .cards {
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    }
-    
-    .controls {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    
-    .export-buttons {
-        margin-left: 0;
-        width: 100%;
-        justify-content: flex-end;
-    }
-    
-    .chart-container {
-        height: 250px;
-        padding: 1rem;
-    }
-    
-    .chart-container h3 {
-        left: 1rem;
-    }
-}
-
-@media screen and (max-width: 480px) {
-    .cards {
-        grid-template-columns: 1fr;
-    }
-    
-    .card {
-        padding: 1rem;
-    }
-    
-    table th, table td {
-        padding: 0.6rem;
-        font-size: 0.85rem;
-    }
+    font-family: monospace;
 }
 </style>
-<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script> 
-<!-- Flatpickr for date range picker -->
 <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script> 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css"> 
 </head>
 <body>
 <div class="container">
-
   <div style="display:flex; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
-    <a href="../leads/list.php" class="btn">← Leads</a>
-    <?php if (in_array($roles[0], ['admin'])): ?>
-      <a href="dashboard.php" class="btn">📊 Team Dashboard</a>
-    <?php endif; ?>
-    <div style="margin-left:auto; display:flex; align-items:center;">
-      <span style="font-size:0.9rem; color:var(--c-sub);">Logged in as: <strong><?= htmlspecialchars($user['name']) ?></strong></span>
-    </div>
+    <a href="./../leads/list.php" class="btn">← Leads</a>
+    <select id="userSelect" style="margin-left:auto; padding:.45rem .7rem; font-size:.9rem;">
+      <option value="">All Users</option>
+      <?php foreach ($users as $id => $name): ?>
+        <option value="<?= $id ?>"><?= htmlspecialchars($name) ?></option>
+      <?php endforeach ?>
+    </select>
   </div>
+  <h1>Team Performance Dashboard</h1>
 
-  <h1>My Performance Metrics</h1>
-  
   <!-- Summary Cards -->
   <div class="grid cards">
     <div class="card">
@@ -544,9 +346,9 @@ table tr:hover td {
   <!-- Controls -->
   <div class="controls">
     <div class="range-box">
-      <button class="rng active" data-r="today">Today</button>
-      <button class="rng" data-r="week">This Week</button>
-      <button class="rng" data-r="month">This Month</button>
+      <button class="rng active" data-r="1">Today</button>
+      <button class="rng" data-r="7">This Week</button>
+      <button class="rng" data-r="30">This Month</button>
       <button class="rng" data-r="7">7 Days</button>
       <button class="rng" data-r="30">30 Days</button>
       <div style="display:flex; align-items:center; gap:.5rem;">
@@ -557,12 +359,10 @@ table tr:hover td {
       </div>
     </div>
     <div class="export-buttons">
-      <button onclick="window.location.href='export.php?agent=<?= $user_id ?>&range='+range+'&from='+document.getElementById('pick-from').value+'&to='+document.getElementById('pick-to').value;">
-        Export Data
-      </button>
+      <button id="exportBtn">Export Data</button>
     </div>
   </div>
-  
+
   <!-- Charts Grid -->
   <div class="charts-grid">
     <div class="chart-container">
@@ -587,64 +387,52 @@ table tr:hover td {
         <tr>
           <th>Date</th>
           <th>Lead</th>
+          <th>Agent</th>
           <th>Disposition</th>
           <th>Duration</th>
         </tr>
       </thead>
       <tbody id="latest-calls">
         <tr>
-          <td colspan="4" style="text-align:center; padding: 2rem;">Loading call data...</td>
+          <td colspan="5" style="text-align:center; padding: 2rem;">Loading call data...</td>
         </tr>
       </tbody>
     </table>
   </div>
-
 </div>
 
 <!-- JavaScript -->
 <script>
 const Num = x => Intl.NumberFormat().format(x);
 function formatDuration(seconds) {
+    if (!seconds) return '–';
     if (seconds < 60) return `${seconds} sec`;
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
-    return `${m} min ${s > 0 ? `${s} sec` : ''}`;
+    return `${m} min ${s > 0 ? `${s} sec` : ''}`.trim();
 }
+let range = '1', autoRefresh = true;
 
-let range = 'today', autoRefresh = true;
-
-// Chart Instances
+// Initialize Charts
 const cDay = new Chart(document.getElementById('cDay'), {
     type: 'line',
-    data: { 
-        labels: [], 
-        datasets: [{ 
+    data: {
+        labels: [],
+        datasets: [{
             label: 'Calls',
             data: [],
-            borderColor: '#2c5d4a',
-            backgroundColor: 'rgba(44, 93, 74, 0.1)',
-            borderWidth: 2,
-            pointBackgroundColor: '#fff',
-            pointBorderColor: '#2c5d4a',
-            pointRadius: 4,
+            borderColor: '#4a86e8',
+            backgroundColor: 'rgba(74, 134, 232, 0.1)',
             tension: 0.3,
             fill: true
-        }] 
+        }]
     },
-    options: { 
+    options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false }
-        },
+        plugins: { legend: { display: false } },
         scales: {
-            y: {
-                beginAtZero: true,
-                grid: { color: 'rgba(0, 0, 0, 0.05)' }
-            },
-            x: {
-                grid: { display: false }
-            }
+            y: { beginAtZero: true }
         }
     }
 });
@@ -652,80 +440,59 @@ const cDay = new Chart(document.getElementById('cDay'), {
 const cHour = new Chart(document.getElementById('cHour'), {
     type: 'bar',
     data: {
-        labels: [...Array(24).keys()].map(h => String(h).padStart(2, '0')),
-        datasets: [{ 
-            label: 'Calls per Hour', 
-            data: [],
-            backgroundColor: 'rgba(44, 93, 74, 0.7)',
-            borderColor: '#2c5d4a',
-            borderWidth: 1
+        labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+        datasets: [{
+            label: 'Calls',
+            data: Array(24).fill(0),
+            backgroundColor: '#4a86e8'
         }]
     },
-    options: { 
+    options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false }
-        },
+        plugins: { legend: { display: false } },
         scales: {
-            y: {
-                beginAtZero: true,
-                grid: { color: 'rgba(0, 0, 0, 0.05)' }
-            },
-            x: {
-                grid: { display: false }
-            }
+            y: { beginAtZero: true }
         }
     }
 });
 
 const cDisposition = new Chart(document.getElementById('cDisposition'), {
     type: 'doughnut',
-    data: { 
-        labels: [], 
-        datasets: [{ 
+    data: {
+        labels: [],
+        datasets: [{
             data: [],
             backgroundColor: [
-                '#2c5d4a',
-                '#3d7a63',
-                '#4e967c',
-                '#5fb395',
-                '#70d0ae'
-            ],
-            borderWidth: 1
-        }] 
+                '#4a86e8', '#e69138', '#6aa84f', '#cc0000', 
+                '#674ea7', '#3d85c6', '#f6b26b', '#b6d7a8'
+            ]
+        }]
     },
     options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-            legend: { 
-                position: 'right',
-                labels: {
-                    padding: 15,
-                    usePointStyle: true,
-                    pointStyle: 'circle'
-                }
-            }
-        },
-        cutout: '60%'
+            legend: { position: 'right' }
+        }
     }
 });
 
-function fetchData() {
+function fetchData(user_id = null) {
     const url = new URL(window.location.pathname, window.location.origin);
     url.searchParams.set('api', '1');
-
     const from = document.getElementById('pick-from').value;
     const to = document.getElementById('pick-to').value;
-
     if (from && to) {
         url.searchParams.set('from', from);
         url.searchParams.set('to', to);
     } else {
         url.searchParams.set('range', range);
     }
-
+    if (user_id !== null) {
+        url.searchParams.set('user', user_id);
+    }
+    
     fetch(url)
         .then(r => r.json())
         .then(d => {
@@ -753,10 +520,10 @@ function updateUI(data) {
     cDay.data.labels = Object.keys(data.day);
     cDay.data.datasets[0].data = Object.values(data.day);
     cDay.update();
-
+    
     cHour.data.datasets[0].data = Object.values(data.hour);
     cHour.update();
-
+    
     cDisposition.data.labels = Object.keys(data.dispositions);
     cDisposition.data.datasets[0].data = Object.values(data.dispositions);
     cDisposition.update();
@@ -764,24 +531,23 @@ function updateUI(data) {
     // Latest calls table
     const tbody = document.getElementById('latest-calls');
     tbody.innerHTML = '';
-    
-    if (data.latest_calls.length === 0) {
+    if (!data.latest_calls || data.latest_calls.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="4" style="text-align:center; padding: 2rem;">
+                <td colspan="5" style="text-align:center; padding: 2rem;">
                     No calls found in the selected period
                 </td>
             </tr>
         `;
         return;
     }
-    
     data.latest_calls.forEach(row => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${new Date(row.created_at).toLocaleString()}</td>
-            <td>${row.lead_name}</td>
-            <td>${row.disposition}</td>
+            <td>${row.lead_name || 'Unknown'}</td>
+            <td>${row.agent || 'Unknown'}</td>
+            <td>${row.disposition || 'Unknown'}</td>
             <td class="duration-cell">${row.duration_seconds ? formatDuration(row.duration_seconds) : '–'}</td>
         `;
         tbody.appendChild(tr);
@@ -794,35 +560,39 @@ document.querySelectorAll('.rng').forEach(btn => {
         document.querySelectorAll('.rng').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         range = btn.dataset.r;
-        fetchData();
+        document.getElementById('pick-from').value = '';
+        document.getElementById('pick-to').value = '';
+        fetchData(document.getElementById('userSelect').value);
     };
 });
 
 // Date pickers
-flatpickr("#pick-from", { 
-    dateFormat: "Y-m-d",
-    altInput: true,
-    altFormat: "M j, Y",
-    allowInput: true
-});
-
-flatpickr("#pick-to", { 
-    dateFormat: "Y-m-d",
-    altInput: true,
-    altFormat: "M j, Y",
-    allowInput: true
-});
-
+flatpickr("#pick-from", { dateFormat: "Y-m-d", altInput: true, altFormat: "M j, Y", allowInput: true });
+flatpickr("#pick-to", { dateFormat: "Y-m-d", altInput: true, altFormat: "M j, Y", allowInput: true });
 document.getElementById('applyCustom').onclick = () => {
     document.querySelectorAll('.rng').forEach(b => b.classList.remove('active'));
     range = 'custom';
-    fetchData();
+    fetchData(document.getElementById('userSelect').value);
+};
+
+// User selection
+document.getElementById('userSelect').onchange = () => {
+    fetchData(document.getElementById('userSelect').value);
+};
+
+// Export button
+document.getElementById('exportBtn').onclick = () => {
+    const user = document.getElementById('userSelect').value;
+    const from = document.getElementById('pick-from').value;
+    const to = document.getElementById('pick-to').value;
+    const url = `export.php?agent=${user}&range=${range}&from=${from}&to=${to}`;
+    window.location.href = url;
 };
 
 // Initial load
 fetchData();
 setInterval(() => {
-    if (autoRefresh) fetchData();
+    if (autoRefresh) fetchData(document.getElementById('userSelect').value);
 }, 15000);
 </script>
 </body>

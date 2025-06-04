@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 02, 2025 at 05:34 PM
+-- Generation Time: Jun 04, 2025 at 01:33 PM
 -- Server version: 10.4.22-MariaDB
 -- PHP Version: 8.1.2
 
@@ -145,7 +145,8 @@ INSERT INTO `interactions` (`id`, `lead_id`, `user_id`, `disposition_id`, `notes
 (9, 198113, 5, 2, 'Lead seems qualified, moving to next stage.', '2025-06-01 11:30:00', 300, '2025-06-01 11:30:00', '2025-06-01 11:30:00'),
 (10, 198114, 4, 1, 'No answer, left message.', '2025-06-02 09:00:00', 25, '2025-06-02 09:00:00', '2025-06-02 09:00:00'),
 (11, 198115, 4, 2, 'Interested in a follow-up call today.', '2025-06-02 09:15:00', 90, '2025-06-02 09:15:00', '2025-06-02 09:15:00'),
-(12, 198116, 4, 4, 'Follow up next week for a demo.', '2025-06-02 09:45:00', 150, '2025-06-02 09:45:00', '2025-06-02 09:45:00');
+(12, 198116, 4, 4, 'Follow up next week for a demo.', '2025-06-02 09:45:00', 150, '2025-06-02 09:45:00', '2025-06-02 09:45:00'),
+(13, 198126, 5, 2, 'testing interested ', '2025-06-03 11:51:13', 55, '2025-06-03 11:51:13', '2025-06-03 11:51:13');
 
 -- --------------------------------------------------------
 
@@ -302,6 +303,8 @@ INSERT INTO `lead_sources` (`id`, `name`, `description`, `active`, `created_at`)
 CREATE TABLE `lead_statuses` (
   `id` int(11) NOT NULL,
   `name` varchar(50) NOT NULL,
+  `description` text DEFAULT NULL,
+  `order_index` int(11) NOT NULL DEFAULT 99,
   `created_at` datetime NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -309,11 +312,14 @@ CREATE TABLE `lead_statuses` (
 -- Dumping data for table `lead_statuses`
 --
 
-INSERT INTO `lead_statuses` (`id`, `name`, `created_at`) VALUES
-(1, 'New', '2025-05-14 18:06:03'),
-(2, 'Contacted', '2025-05-14 18:06:03'),
-(3, 'Qualified', '2025-05-14 18:06:03'),
-(4, 'Closed', '2025-05-14 18:06:03');
+INSERT INTO `lead_statuses` (`id`, `name`, `description`, `order_index`, `created_at`) VALUES
+(1, 'New', 'Newly added lead', 1, '2025-05-14 18:06:03'),
+(2, 'Contacted', 'Initial contact made', 2, '2025-05-14 18:06:03'),
+(3, 'Qualified', 'Lead shows interest and qualifies', 6, '2025-05-14 18:06:03'),
+(4, 'Closed', 'No further action needed', 7, '2025-05-14 18:06:03'),
+(5, 'Follow Up', 'Needs follow-up contact at a later time', 3, '2025-06-03 10:05:45'),
+(6, 'Pending', 'Awaiting response or additional information', 5, '2025-06-03 10:05:45'),
+(7, 'In Progress', 'Active work is being done on this lead', 4, '2025-06-03 10:05:45');
 
 -- --------------------------------------------------------
 
@@ -519,7 +525,7 @@ ALTER TABLE `insurance_interests`
 -- AUTO_INCREMENT for table `interactions`
 --
 ALTER TABLE `interactions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT for table `leads`
@@ -543,7 +549,7 @@ ALTER TABLE `lead_sources`
 -- AUTO_INCREMENT for table `lead_statuses`
 --
 ALTER TABLE `lead_statuses`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `roles`
