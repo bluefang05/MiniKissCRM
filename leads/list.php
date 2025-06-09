@@ -1,17 +1,14 @@
 <?php
-
-
 // Start session early
-
 require_once __DIR__ . '/../lib/Auth.php';
 require_once __DIR__ . '/../lib/db.php';
 
 if (!Auth::check()) {
-    header('Location: ./../auth/login.php'); // Fix redirect path
+    header('Location: ./../auth/login.php');
     exit;
 }
 
-$user  = Auth::user();
+$user = Auth::user();
 $roles = $user['roles'] ?? [];
 
 // Capabilities
@@ -21,7 +18,7 @@ $canViewCalls   = (bool) array_intersect($roles, ['admin', 'sales']);
 $canManageUsers = in_array('admin', $roles, true);
 $canEdit        = $canCreate;
 $canCall        = (bool) array_intersect($roles, ['admin', 'sales']);
-$canViewDashboard = (bool) array_intersect($roles, ['admin', 'viwer']);
+$canViewDashboard = (bool) array_intersect($roles, ['admin', 'viewer']);
 
 $pdo = getPDO();
 
@@ -36,37 +33,43 @@ $offset  = ($page - 1) * $perPage;
 //---------------------------------------------
 // Look-ups
 //---------------------------------------------
-$sources   = $pdo->query("SELECT id, name FROM lead_sources WHERE active=1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
-$interests = $pdo->query("SELECT id, name FROM insurance_interests WHERE active=1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
-$statuses  = $pdo->query("SELECT id, name FROM lead_statuses ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
-$languages = $pdo->query("SELECT code, description FROM language_codes ORDER BY description")->fetchAll(PDO::FETCH_ASSOC);
-$incomes   = $pdo->query("SELECT code, description FROM income_ranges ORDER BY description")->fetchAll(PDO::FETCH_ASSOC);
+$sources      = $pdo->query("SELECT id, name FROM lead_sources WHERE active=1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+$interests    = $pdo->query("SELECT id, name FROM insurance_interests WHERE active=1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+$languages    = $pdo->query("SELECT code, description FROM language_codes ORDER BY description")->fetchAll(PDO::FETCH_ASSOC);
+$incomes      = $pdo->query("SELECT code, description FROM income_ranges ORDER BY description")->fetchAll(PDO::FETCH_ASSOC);
+$dispositions = $pdo->query("SELECT id, name FROM dispositions ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
 
 //---------------------------------------------
 // Build WHERE according to filters
 //---------------------------------------------
 $conds  = ["1=1"];
 $params = [];
+
 $filterMap = [
-    'source'   => ['l.source_id', PDO::PARAM_INT],
-    'interest' => ['l.insurance_interest_id', PDO::PARAM_INT],
-    'status'   => ['l.status_id', PDO::PARAM_INT],
-    'language' => ['l.language', PDO::PARAM_STR],
-    'income'   => ['l.income', PDO::PARAM_STR],
-    'age_min'  => ['l.age >=', PDO::PARAM_INT],
-    'age_max'  => ['l.age <=', PDO::PARAM_INT],
+    'source'       => ['l.source_id', PDO::PARAM_INT],
+    'interest'     => ['l.insurance_interest_id', PDO::PARAM_INT],
+    'language'     => ['l.language', PDO::PARAM_STR],
+    'income'       => ['l.income', PDO::PARAM_STR],
+    'age_min'      => ['l.age >=', PDO::PARAM_INT],
+    'age_max'      => ['l.age <=', PDO::PARAM_INT],
+    'disposition'  => ['d.id', PDO::PARAM_INT],
 ];
 
 foreach ($filterMap as $key => [$expr, $type]) {
     if (!empty($_GET[$key])) {
-        $conds[]  = "$expr = ?";
+        // Handle operators like >= or <= correctly
+        if (preg_match('/[><=]/', $expr)) {
+            $conds[] = "$expr ?";
+        } else {
+            $conds[] = "$expr = ?";
+        }
         $params[] = $_GET[$key];
     }
 }
 
 if (!empty($_GET['search'])) {
-    $search   = "%{$_GET['search']}%";
-    $conds[]  = "(l.first_name LIKE ? OR l.last_name LIKE ? OR l.phone LIKE ?)";
+    $search = "%{$_GET['search']}%";
+    $conds[] = "(l.first_name LIKE ? OR l.last_name LIKE ? OR l.phone LIKE ?)";
     array_push($params, $search, $search, $search);
 }
 
@@ -78,19 +81,28 @@ $lockedStmt = $pdo->prepare(
 );
 $lockedStmt->execute([$user['id']]);
 $lockedIds = $lockedStmt->fetchAll(PDO::FETCH_COLUMN);
-
 if ($lockedIds) {
     $placeholders = implode(',', array_fill(0, count($lockedIds), '?'));
-    $conds[]      = "l.id NOT IN ($placeholders)";
-    $params       = array_merge($params, $lockedIds);
+    $conds[] = "l.id NOT IN ($placeholders)";
+    $params = array_merge($params, $lockedIds);
 }
-
 $where = implode(' AND ', $conds);
 
 //---------------------------------------------
 // Totals & Pages
 //---------------------------------------------
-$countStmt  = $pdo->prepare("SELECT COUNT(*) FROM leads l WHERE $where");
+$countStmt = $pdo->prepare("
+    SELECT COUNT(*) 
+    FROM leads l
+    LEFT JOIN (
+        SELECT lead_id, disposition_id
+        FROM interactions
+        WHERE id IN (
+            SELECT MAX(id) FROM interactions GROUP BY lead_id
+        )
+    ) latest_interactions ON l.id = latest_interactions.lead_id
+    LEFT JOIN dispositions d ON latest_interactions.disposition_id = d.id
+    WHERE $where");
 $countStmt->execute($params);
 $totalLeads = (int) $countStmt->fetchColumn();
 $totalPages = (int) ceil($totalLeads / $perPage);
@@ -101,26 +113,32 @@ $totalPages = (int) ceil($totalLeads / $perPage);
 $sql = "
     SELECT
         l.id,
-        CONCAT_WS(' ',l.prefix,l.first_name,l.mi,l.last_name) AS full_name,
+        CONCAT_WS(' ', l.prefix, l.first_name, l.mi, l.last_name) AS full_name,
         l.phone,
         lc.description AS language_desc,
         ir.description AS income_desc,
-        ii.name        AS interest,
-        s.name         AS status,
+        ii.name AS interest,
+        d.name AS disposition,
+        l.age,
         l.do_not_call,
-        ll.user_id     AS locked_by,
-        ll.expires_at  AS lock_expires
+        ll.user_id AS locked_by,
+        ll.expires_at AS lock_expires
     FROM leads l
-    LEFT JOIN language_codes      lc ON l.language               = lc.code
-    LEFT JOIN income_ranges       ir ON l.income                 = ir.code
+    LEFT JOIN language_codes lc ON l.language = lc.code
+    LEFT JOIN income_ranges ir ON l.income = ir.code
     LEFT JOIN insurance_interests ii ON l.insurance_interest_id = ii.id
-    LEFT JOIN lead_statuses       s  ON l.status_id              = s.id
-    LEFT JOIN lead_locks          ll ON l.id                     = ll.lead_id
-                                        AND ll.expires_at >= NOW()
+    LEFT JOIN lead_locks ll ON l.id = ll.lead_id AND ll.expires_at >= NOW()
+    LEFT JOIN (
+        SELECT lead_id, disposition_id
+        FROM interactions
+        WHERE id IN (
+            SELECT MAX(id) FROM interactions GROUP BY lead_id
+        )
+    ) latest_interactions ON l.id = latest_interactions.lead_id
+    LEFT JOIN dispositions d ON latest_interactions.disposition_id = d.id
     WHERE $where
     ORDER BY l.id DESC
-    LIMIT $offset, $perPage
-";
+    LIMIT $offset, $perPage";
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -140,143 +158,99 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
   <meta charset="UTF-8">
   <title>Leads List</title>
   <link rel="stylesheet" href="../assets/css/app.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css " />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"> 
   <style>
     .badge { padding:2px 6px; border-radius:4px; font-size:.75rem; color:#fff; }
     .badge-green  { background:#2c5d4a; }
     .badge-orange { background:#f57c00; }
     .badge-red    { background:#d32f2f; }
     .row-actions a { margin-right:4px; }
-    form.filters-form select,
-    form.filters-form input { margin:0 6px 10px 0; }
+    form.filters-form select, form.filters-form input { margin:0 6px 10px 0; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1><i class="fas fa-address-book"></i> Leads List</h1>
-<div class="actions">
-    <!-- DASHBOARD SECTION -->
-    <?php if ($canViewDashboard): ?>
-        <a class="btn-slide" href="../admin/dashboard.php" title="Dashboard">
-            <i class="fas fa-tachometer-alt"></i><span> Dashboard</span>
-        </a>
-    <?php endif; ?>
 
-    <!-- METRICS SECTION -->
-    <?php if ($canViewDashboard): ?>
-        <a class="btn-slide" href="../admin/my_metrics.php" title="My Metrics">
-            <i class="fas fa-chart-line"></i><span> My Metrics</span>
-        </a>
-    <?php endif; ?>
-
-    <?php if ($canManageUsers): // Only admin can see this ?>
-        <a class="btn-slide" href="../admin/all_metrics.php" title="All Metrics">
-            <i class="fas fa-chart-pie"></i><span> All Metrics</span>
-        </a>
-    <?php endif; ?>
-
-
-    <!-- CALLS SECTION -->
-    <?php if ($canViewCalls): ?>
-        <a class="btn-slide" href="../calls/my_interactions.php" title="My Calls">
-            <i class="fas fa-phone"></i><span> My Calls</span>
-        </a>
-
-        <a class="btn-slide" href="../calls/list.php" title="All Calls">
-            <i class="fas fa-phone-alt"></i><span> All Calls</span>
-        </a>
-    <?php endif; ?>
-
-
-    <!-- LEADS SECTION -->
-    <?php if ($canCreate): ?>
-        <a class="btn-slide" href="add.php" title="New Lead">
-            <i class="fas fa-plus-circle"></i><span> New Lead</span>
-        </a>
-    <?php endif; ?>
-
-    <?php if ($canImport): ?>
-        <a class="btn-slide" href="import.php" title="Import Leads">
-            <i class="fas fa-file-import"></i><span> Import Leads</span>
-        </a>
-    <?php endif; ?>
-
-
-    <!-- ADMIN TOOLS SECTION -->
-    <?php if ($canManageUsers): ?>
-        <a class="btn-slide" href="../admin/users.php" title="User Management">
-            <i class="fas fa-users-cog"></i><span> User Management</span>
-        </a>
-
-        <a class="btn-slide" href="../admin/documents.php" title="Documents">
-            <i class="fas fa-folder-open"></i><span> Documents</span>
-        </a>
-    <?php endif; ?>
-
-
-    <!-- LOGOUT -->
-    <a class="btn-slide btn-secondary" href="../auth/logout.php" title="Logout">
-        <i class="fas fa-right-from-bracket"></i><span> Exit</span>
-    </a>
-</div>
+    <!-- Actions -->
+    <div class="actions">
+      <?php if ($canViewDashboard): ?>
+        <a class="btn-slide" href="../admin/dashboard.php"><i class="fas fa-tachometer-alt"></i><span> Dashboard</span></a>
+        <a class="btn-slide" href="../admin/my_metrics.php"><i class="fas fa-chart-line"></i><span> My Metrics</span></a>
+      <?php endif; ?>
+      <?php if ($canManageUsers): ?>
+        <a class="btn-slide" href="../admin/all_metrics.php"><i class="fas fa-chart-pie"></i><span> All Metrics</span></a>
+      <?php endif; ?>
+      <?php if ($canViewCalls): ?>
+        <a class="btn-slide" href="../calls/my_interactions.php"><i class="fas fa-phone"></i><span> My Calls</span></a>
+        <a class="btn-slide" href="../calls/list.php"><i class="fas fa-phone-alt"></i><span> All Calls</span></a>
+      <?php endif; ?>
+      <?php if ($canCreate): ?>
+        <a class="btn-slide" href="add.php"><i class="fas fa-plus-circle"></i><span> New Lead</span></a>
+      <?php endif; ?>
+      <?php if ($canImport): ?>
+        <a class="btn-slide" href="import.php"><i class="fas fa-file-import"></i><span> Import Leads</span></a>
+      <?php endif; ?>
+      <?php if ($canManageUsers): ?>
+        <a class="btn-slide" href="../admin/users.php"><i class="fas fa-users-cog"></i><span> User Management</span></a>
+        <a class="btn-slide" href="../admin/documents.php"><i class="fas fa-folder-open"></i><span> Documents</span></a>
+      <?php endif; ?>
+      <a class="btn-slide btn-secondary" href="../auth/logout.php"><i class="fas fa-right-from-bracket"></i><span> Exit</span></a>
+    </div>
 
     <!-- Filters Form -->
     <form method="get" class="filters-form">
-      <input type="text" name="search"
-             placeholder="Search..."
-             value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
+      <input type="text" name="search" placeholder="Search..." value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
+      
       <select name="source">
         <option value="">Source</option>
         <?php foreach ($sources as $s): ?>
-        <option value="<?= $s['id'] ?>"
-          <?= ($_GET['source'] ?? '') == $s['id'] ? 'selected' : '' ?>>
-          <?= htmlspecialchars($s['name']) ?>
-        </option>
+          <option value="<?= $s['id'] ?>" <?= ($_GET['source'] ?? '') == $s['id'] ? 'selected' : '' ?>>
+            <?= htmlspecialchars($s['name']) ?>
+          </option>
         <?php endforeach; ?>
       </select>
+
       <select name="interest">
         <option value="">Interest</option>
         <?php foreach ($interests as $i): ?>
-        <option value="<?= $i['id'] ?>"
-          <?= ($_GET['interest'] ?? '') == $i['id'] ? 'selected' : '' ?>>
-          <?= htmlspecialchars($i['name']) ?>
-        </option>
+          <option value="<?= $i['id'] ?>" <?= ($_GET['interest'] ?? '') == $i['id'] ? 'selected' : '' ?>>
+            <?= htmlspecialchars($i['name']) ?>
+          </option>
         <?php endforeach; ?>
       </select>
-      <select name="status">
-        <option value="">Status</option>
-        <?php foreach ($statuses as $s): ?>
-        <option value="<?= $s['id'] ?>"
-          <?= ($_GET['status'] ?? '') == $s['id'] ? 'selected' : '' ?>>
-          <?= htmlspecialchars($s['name']) ?>
-        </option>
+
+      <select name="disposition">
+        <option value="">Disposition</option>
+        <?php foreach ($dispositions as $d): ?>
+          <option value="<?= $d['id'] ?>" <?= ($_GET['disposition'] ?? '') == $d['id'] ? 'selected' : '' ?>>
+            <?= htmlspecialchars($d['name']) ?>
+          </option>
         <?php endforeach; ?>
       </select>
+
       <select name="language">
         <option value="">Language</option>
         <?php foreach ($languages as $l): ?>
-        <option value="<?= $l['code'] ?>"
-          <?= ($_GET['language'] ?? '') == $l['code'] ? 'selected' : '' ?>>
-          <?= htmlspecialchars($l['description']) ?>
-        </option>
+          <option value="<?= $l['code'] ?>" <?= ($_GET['language'] ?? '') == $l['code'] ? 'selected' : '' ?>>
+            <?= htmlspecialchars($l['description']) ?>
+          </option>
         <?php endforeach; ?>
       </select>
+
       <select name="income">
         <option value="">Income</option>
         <?php foreach ($incomes as $i): ?>
-        <option value="<?= $i['code'] ?>"
-          <?= ($_GET['income'] ?? '') == $i['code'] ? 'selected' : '' ?>>
-          <?= htmlspecialchars($i['description']) ?>
-        </option>
+          <option value="<?= $i['code'] ?>" <?= ($_GET['income'] ?? '') == $i['code'] ? 'selected' : '' ?>>
+            <?= htmlspecialchars($i['description']) ?>
+          </option>
         <?php endforeach; ?>
       </select>
-      <input type="number" name="age_min" placeholder="Min Age"
-             value="<?= htmlspecialchars($_GET['age_min'] ?? '') ?>">
-      <input type="number" name="age_max" placeholder="Max Age"
-             value="<?= htmlspecialchars($_GET['age_max'] ?? '') ?>">
-      <button type="submit" class="btn">
-        <i class="fas fa-filter"></i> Filter
-      </button>
+
+      <input type="number" name="age_min" placeholder="Min Age" value="<?= htmlspecialchars($_GET['age_min'] ?? '') ?>">
+      <input type="number" name="age_max" placeholder="Max Age" value="<?= htmlspecialchars($_GET['age_max'] ?? '') ?>">
+
+      <button type="submit" class="btn"><i class="fas fa-filter"></i> Filter</button>
       <a href="list.php" class="btn btn-secondary">Clear Filters</a>
     </form>
 
@@ -284,91 +258,78 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
     <table class="table">
       <thead>
         <tr>
-          <th>ID</th><th>Name</th><th>Phone</th>
-          <th>Income</th><th>Language</th><th>Interest</th>
-          <th>Status</th><th>Actions</th>
+          <th>ID</th><th>Name</th><th>Phone</th><th>Age</th><th>Income</th><th>Language</th><th>Interest</th><th>Disposition</th><th>Actions</th>
         </tr>
       </thead>
       <tbody>
         <?php if (empty($leads)): ?>
-        <tr><td colspan="8" style="text-align:center;">No leads found.</td></tr>
+          <tr><td colspan="9" style="text-align:center;">No leads found.</td></tr>
         <?php else: foreach ($leads as $lead): ?>
-        <tr>
-          <td><?= $lead['id'] ?></td>
-          <td><?= htmlspecialchars($lead['full_name']) ?></td>
-          <td><?= htmlspecialchars($lead['phone']) ?></td>
-          <td><?= htmlspecialchars($lead['income_desc']) ?></td>
-          <td><?= htmlspecialchars($lead['language_desc']) ?></td>
-          <td><?= htmlspecialchars($lead['interest']) ?></td>
-          <td>
-            <?php
-              $st = strtolower($lead['status']);
-              switch ($st) {
-                  case 'new':
-                      $cls = 'badge-green';
-                      break;
-                  case 'contacted':
-                      $cls = 'badge-orange';
-                      break;
-                  case 'qualified':
-                      $cls = 'badge-green';
-                      break;
-                  case 'closed':
-                      $cls = 'badge-red';
-                      break;
-                  default:
-                      $cls = 'badge-orange';
-              }
-            ?>
-            <span class="badge <?= $cls ?>"><?= htmlspecialchars($lead['status']) ?></span>
-          </td>
-          <td class="row-actions">
-            <a class="btn btn-sm btn-secondary" title="View" href="view.php?id=<?= $lead['id'] ?>">
-              <i class="fas fa-eye"></i>
-            </a>
-            <?php if ($canEdit): ?>
-            <a class="btn btn-sm" title="Edit" style="background:#007bff" href="edit.php?lead_id=<?= $lead['id'] ?>">
-              <i class="fas fa-pen"></i>
-            </a>
-            <?php endif; ?>
-            <?php if ($canCall): ?>
-            <a class="btn btn-sm" title="Call" style="background:#28a745" href="../calls/add.php?lead_id=<?= $lead['id'] ?>">
-              <i class="fas fa-phone"></i>
-            </a>
-            <?php endif; ?>
-            <?php if ($lead['do_not_call']): ?>
-            <i class="fas fa-ban" title="Do Not Call" style="color:#d32f2f; margin-left:4px;"></i>
-            <?php endif; ?>
-            <?php if (!empty($lead['locked_by'])): ?>
-              <?php if ((int)$lead['locked_by'] === (int)$user['id']): ?>
-              <i class="fas fa-lock-open" title="Locked by you until <?= $lead['lock_expires'] ?>" style="color:#2c5d4a;"></i>
-              <?php else: ?>
-              <i class="fas fa-lock" title="Locked by another user until <?= $lead['lock_expires'] ?>" style="color:#d32f2f;"></i>
+          <tr>
+            <td><?= $lead['id'] ?></td>
+            <td><?= htmlspecialchars($lead['full_name']) ?></td>
+            <td><?= htmlspecialchars($lead['phone']) ?></td>
+            <td><?= $lead['age'] ?: '-' ?></td>
+            <td><?= htmlspecialchars($lead['income_desc']) ?></td>
+            <td><?= htmlspecialchars($lead['language_desc']) ?></td>
+            <td><?= htmlspecialchars($lead['interest']) ?></td>
+            <td>
+              <?php
+                $dsp = strtolower($lead['disposition'] ?? '');
+                switch ($dsp) {
+                    case 'interested':
+                        $cls = 'badge-green';
+                        break;
+                    case 'follow up':
+                        $cls = 'badge-orange';
+                        break;
+                    case 'not interested':
+                        $cls = 'badge-red';
+                        break;
+                    default:
+                        $cls = 'badge-orange';
+                }
+              ?>
+              <span class="badge <?= $cls ?>"><?= htmlspecialchars($lead['disposition'] ?? 'No call') ?></span>
+            </td>
+            <td class="row-actions">
+              <a class="btn btn-sm btn-secondary" title="View" href="view.php?id=<?= $lead['id'] ?>"><i class="fas fa-eye"></i></a>
+              <?php if ($canEdit): ?>
+                <a class="btn btn-sm" title="Edit" style="background:#007bff" href="edit.php?lead_id=<?= $lead['id'] ?>"><i class="fas fa-pen"></i></a>
               <?php endif; ?>
-            <?php endif; ?>
-          </td>
-        </tr>
+              <?php if ($canCall): ?>
+                <a class="btn btn-sm" title="Call" style="background:#28a745" href="../calls/add.php?lead_id=<?= $lead['id'] ?>"><i class="fas fa-phone"></i></a>
+              <?php endif; ?>
+              <?php if ($lead['do_not_call']): ?>
+                <i class="fas fa-ban" title="Do Not Call" style="color:#d32f2f; margin-left:4px;"></i>
+              <?php endif; ?>
+              <?php if (!empty($lead['locked_by'])): ?>
+                <?php if ((int)$lead['locked_by'] === (int)$user['id']): ?>
+                  <i class="fas fa-lock-open" title="Locked by you until <?= $lead['lock_expires'] ?>" style="color:#2c5d4a;"></i>
+                <?php else: ?>
+                  <i class="fas fa-lock" title="Locked by another user until <?= $lead['lock_expires'] ?>" style="color:#d32f2f;"></i>
+                <?php endif; ?>
+              <?php endif; ?>
+            </td>
+          </tr>
         <?php endforeach; endif; ?>
       </tbody>
     </table>
 
     <!-- Pagination -->
     <?php if ($totalPages > 1): ?>
-    <div class="pagination">
-      <?php if ($page > 1): ?>
-      <a href="<?= $baseUrl ?>page=<?= $page - 1 ?>">
-        <i class="fas fa-chevron-left"></i> Previous
-      </a>
-      <?php endif; ?>
-      <?php for ($i = max(1,$page-2); $i <= min($totalPages,$page+2); $i++): ?>
-      <a class="<?= $i === $page ? 'active' : '' ?>" href="<?= $baseUrl ?>page=<?= $i ?>"><?= $i ?></a>
-      <?php endfor; ?>
-      <?php if ($page < $totalPages): ?>
-      <a href="<?= $baseUrl ?>page=<?= $page + 1 ?>">Next <i class="fas fa-chevron-right"></i></a>
-      <?php endif; ?>
-    </div>
+      <div class="pagination">
+        <?php if ($page > 1): ?>
+          <a href="<?= $baseUrl ?>page=<?= $page - 1 ?>"><i class="fas fa-chevron-left"></i> Previous</a>
+        <?php endif; ?>
+        <?php for ($i = max(1,$page-2); $i <= min($totalPages,$page+2); $i++): ?>
+          <a class="<?= $i === $page ? 'active' : '' ?>" href="<?= $baseUrl ?>page=<?= $i ?>"><?= $i ?></a>
+        <?php endfor; ?>
+        <?php if ($page < $totalPages): ?>
+          <a href="<?= $baseUrl ?>page=<?= $page + 1 ?>">Next <i class="fas fa-chevron-right"></i></a>
+        <?php endif; ?>
+      </div>
     <?php endif; ?>
-
   </div>
 </body>
 </html>

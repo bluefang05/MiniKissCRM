@@ -23,7 +23,7 @@ require_once __DIR__.'./../lib/db.php';
 
 // Authentication check
 if (!Auth::check()) {
-    header('Location: auth/login.php');
+    header('Location: ./../auth/login.php');
     exit;
 }
 
