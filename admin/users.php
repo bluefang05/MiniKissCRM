@@ -3,8 +3,8 @@
 require_once __DIR__ . '/../lib/Auth.php';
 require_once __DIR__ . '/../lib/db.php';
 
-session_start();
-if (!Auth::check() || !in_array('admin', Auth::user()['roles'] ?? [])) {
+
+if (!Auth::check() || !in_array('admin', Auth::user()['roles'] ?? []) && !in_array('owner', Auth::user()['roles'] ?? [])) {
     die('<div class="container"><h1>Access Denied</h1></div>');
 }
 
@@ -13,21 +13,40 @@ $pdo = getPDO();
 // -- Build filters --
 $where   = [];
 $params  = [];
+
 if (!empty($_GET['search'])) {
-    $where[]  = "(name LIKE ? OR email LIKE ?)";
+    $where[]  = "(u.name LIKE ? OR u.email LIKE ?)";
     $like     = '%'.$_GET['search'].'%';
     $params   = [$like, $like];
 }
 if (!empty($_GET['status'])) {
-    $where[]  = "status = ?";
+    $where[]  = "u.status = ?";
     $params[] = $_GET['status'];
+}
+if (!empty($_GET['role'])) {
+    $where[]  = "ur.role_id = ?";
+    $params[] = $_GET['role'];
 }
 $whereSql = $where ? 'WHERE '.implode(' AND ', $where) : '';
 
-// -- Fetch users --
-$stmt = $pdo->prepare("SELECT id, name, email, status FROM users $whereSql ORDER BY name");
+// -- Fetch users with their roles --
+$sql = "
+    SELECT u.id, u.name, u.email, u.status, GROUP_CONCAT(r.name SEPARATOR ', ') AS roles
+    FROM users u
+    LEFT JOIN user_roles ur ON u.id = ur.user_id
+    LEFT JOIN roles r ON ur.role_id = r.id
+    $whereSql
+    GROUP BY u.id
+    ORDER BY u.name
+";
+
+$stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// -- Fetch roles for filter --
+$roleStmt = $pdo->query("SELECT id, name FROM roles ORDER BY name");
+$roles = $roleStmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -60,6 +79,14 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <option value="active"   <?= ($_GET['status'] ?? '')==='active'   ? 'selected':'' ?>>Active</option>
         <option value="inactive" <?= ($_GET['status'] ?? '')==='inactive' ? 'selected':'' ?>>Inactive</option>
       </select>
+      <select name="role">
+        <option value="">Any role</option>
+        <?php foreach ($roles as $role): ?>
+          <option value="<?= $role['id'] ?>" <?= ($_GET['role'] ?? '')==$role['id'] ? 'selected' : '' ?>>
+            <?= htmlspecialchars($role['name']) ?>
+          </option>
+        <?php endforeach; ?>
+      </select>
       <button type="submit" class="btn">
         <i class="fas fa-filter"></i> Filter
       </button>
@@ -73,13 +100,14 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
           <th>Name</th>
           <th>Email</th>
           <th>Status</th>
+          <th>Roles</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         <?php if (empty($users)): ?>
           <tr>
-            <td colspan="5" style="text-align:center;">No users found.</td>
+            <td colspan="6" style="text-align:center;">No users found.</td>
           </tr>
         <?php else: foreach ($users as $u): ?>
           <tr>
@@ -87,11 +115,12 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <td><?= htmlspecialchars($u['name']) ?></td>
             <td><?= htmlspecialchars($u['email']) ?></td>
             <td><?= ucfirst(htmlspecialchars($u['status'])) ?></td>
+            <td><?= htmlspecialchars($u['roles']) ?></td>
             <td>
               <a href="user_edit.php?id=<?= $u['id'] ?>" class="btn btn-sm">
                 <i class="fas fa-edit"></i> Edit
               </a>
-              <!-- you can add Delete or Toggle Status here -->
+              <!-- Optional: Add delete/status toggle -->
             </td>
           </tr>
         <?php endforeach; endif; ?>

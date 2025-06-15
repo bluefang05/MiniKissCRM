@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 04, 2025 at 01:33 PM
+-- Generation Time: Jun 14, 2025 at 03:59 AM
 -- Server version: 10.4.22-MariaDB
 -- PHP Version: 8.1.2
 
@@ -64,7 +64,9 @@ INSERT INTO `dispositions` (`id`, `name`, `created_at`) VALUES
 (1, 'Left Voicemail', '2025-05-14 18:06:03'),
 (2, 'Interested', '2025-05-14 18:06:03'),
 (3, 'Not Interested', '2025-05-14 18:06:03'),
-(4, 'Follow Up', '2025-05-14 18:06:03');
+(4, 'Follow Up', '2025-05-14 18:06:03'),
+(5, 'Service Sold', '2025-06-13 09:17:34'),
+(6, 'Do Not Call Again', '2025-06-13 09:17:34');
 
 -- --------------------------------------------------------
 
@@ -146,7 +148,80 @@ INSERT INTO `interactions` (`id`, `lead_id`, `user_id`, `disposition_id`, `notes
 (10, 198114, 4, 1, 'No answer, left message.', '2025-06-02 09:00:00', 25, '2025-06-02 09:00:00', '2025-06-02 09:00:00'),
 (11, 198115, 4, 2, 'Interested in a follow-up call today.', '2025-06-02 09:15:00', 90, '2025-06-02 09:15:00', '2025-06-02 09:15:00'),
 (12, 198116, 4, 4, 'Follow up next week for a demo.', '2025-06-02 09:45:00', 150, '2025-06-02 09:45:00', '2025-06-02 09:45:00'),
-(13, 198126, 5, 2, 'testing interested ', '2025-06-03 11:51:13', 55, '2025-06-03 11:51:13', '2025-06-03 11:51:13');
+(13, 198126, 5, 2, 'testing interested ', '2025-06-03 11:51:13', 55, '2025-06-03 11:51:13', '2025-06-03 11:51:13'),
+(14, 198126, 5, 3, 'Lead requested to be removed from future calls.', '2025-06-05 01:31:05', 130, '2025-06-05 01:31:05', '2025-06-05 01:31:05'),
+(15, 198126, 5, 4, '13', '2025-06-12 16:46:17', 13, '2025-06-12 16:46:17', '2025-06-12 16:46:17'),
+(16, 198107, 5, 2, 'Lead very interested in health insurance.', '2025-06-01 10:00:00', 150, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(17, 198108, 5, 3, 'Not interested. Asked not to be contacted again.', '2025-06-01 10:15:00', 60, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(18, 198109, 5, 4, 'Follow-up scheduled for next week.', '2025-06-01 10:30:00', 180, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(19, 198110, 5, 1, 'Left voicemail, no answer.', '2025-06-01 10:45:00', 30, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(20, 198111, 5, 2, 'Interested in quote sent.', '2025-06-01 11:00:00', 240, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(21, 198112, 5, 6, 'Do not call again requested.', '2025-06-01 11:15:00', 45, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(22, 198113, 5, 5, 'Sale closed over the phone.', '2025-06-01 11:30:00', 300, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(23, 198114, 5, 1, 'No answer, left message.', '2025-06-01 11:45:00', 25, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(24, 198115, 6, 2, 'Interested in follow-up today.', '2025-06-01 13:00:00', 90, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(25, 198116, 6, 4, 'Will follow up next week.', '2025-06-01 13:15:00', 150, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(26, 198117, 6, 3, 'Not interested at this time.', '2025-06-01 13:30:00', 60, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(27, 198118, 6, 1, 'Voicemail left.', '2025-06-01 13:45:00', 30, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(28, 198119, 6, 5, 'Service sold after second call.', '2025-06-01 14:00:00', 200, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(29, 198120, 6, 6, 'Asked to remove from list.', '2025-06-01 14:15:00', 60, '2025-06-13 19:18:20', '2025-06-13 19:18:20'),
+(30, 198119, 6, 5, 'Service sold after second call.', '2025-06-01 14:00:00', 200, '2025-06-13 21:14:31', '2025-06-13 21:14:31'),
+(31, 198120, 6, 6, 'Asked to remove from list.', '2025-06-01 14:15:00', 60, '2025-06-13 21:14:31', '2025-06-13 21:14:31'),
+(32, 198117, 5, 2, 'Expressed interest in life insurance.', '2025-06-08 22:35:09', 180, '2025-06-13 21:35:09', '2025-06-13 21:35:09'),
+(33, 198118, 5, 1, 'Left voicemail on mobile.', '2025-06-08 23:35:09', 45, '2025-06-13 21:35:09', '2025-06-13 21:35:09'),
+(34, 198119, 5, 3, 'Not interested in current offerings.', '2025-06-09 00:35:09', 60, '2025-06-13 21:35:09', '2025-06-13 21:35:09'),
+(35, 198120, 4, 4, 'Follow-up scheduled for next week.', '2025-06-09 22:35:09', 90, '2025-06-13 21:35:09', '2025-06-13 21:35:09'),
+(36, 198121, 4, 2, 'Interested in home coverage.', '2025-06-09 23:35:09', 120, '2025-06-13 21:35:09', '2025-06-13 21:35:09'),
+(37, 198122, 4, 1, 'No answer, left message.', '2025-06-10 00:35:09', 30, '2025-06-13 21:35:09', '2025-06-13 21:35:09'),
+(38, 198123, 6, 5, 'Service sold after second call.', '2025-06-10 22:35:09', 200, '2025-06-13 21:35:09', '2025-06-13 21:35:09'),
+(39, 198124, 6, 6, 'Do not call again.', '2025-06-10 23:35:09', 20, '2025-06-13 21:35:09', '2025-06-13 21:35:09'),
+(40, 198125, 7, 2, 'Requested more information via email.', '2025-06-11 22:35:09', 150, '2025-06-13 21:35:09', '2025-06-13 21:35:09'),
+(41, 198126, 7, 4, 'Will follow up tomorrow.', '2025-06-11 23:35:09', 100, '2025-06-13 21:35:09', '2025-06-13 21:35:09'),
+(42, 198107, 6, 1, 'Left voicemail about life insurance.', '2025-06-09 22:22:34', 30, '2025-06-13 21:22:34', '2025-06-13 21:22:34'),
+(43, 198108, 6, 2, 'Lead interested in home coverage.', '2025-06-09 23:22:34', 150, '2025-06-13 21:22:34', '2025-06-13 21:22:34'),
+(44, 198109, 6, 3, 'Not interested at this time.', '2025-06-10 00:22:34', 60, '2025-06-13 21:22:34', '2025-06-13 21:22:34'),
+(45, 198110, 7, 4, 'Follow-up scheduled for tomorrow.', '2025-06-10 22:22:34', 90, '2025-06-13 21:22:34', '2025-06-13 21:22:34'),
+(46, 198111, 7, 2, 'Expressed interest in health plan.', '2025-06-10 23:22:34', 120, '2025-06-13 21:22:34', '2025-06-13 21:22:34'),
+(47, 198112, 7, 1, 'No answer, left message.', '2025-06-11 00:22:34', 45, '2025-06-13 21:22:34', '2025-06-13 21:22:34'),
+(48, 198113, 8, 5, 'Service sold over the phone.', '2025-06-11 22:22:34', 180, '2025-06-13 21:22:34', '2025-06-13 21:22:34'),
+(49, 198114, 8, 6, 'Do not call again requested.', '2025-06-11 23:22:34', 20, '2025-06-13 21:22:34', '2025-06-13 21:22:34'),
+(50, 198115, 9, 2, 'Very interested in auto insurance.', '2025-06-12 22:22:34', 200, '2025-06-13 21:22:34', '2025-06-13 21:22:34'),
+(51, 198116, 9, 4, 'Will follow up next week.', '2025-06-12 23:22:34', 100, '2025-06-13 21:22:34', '2025-06-13 21:22:34'),
+(55, 198107, 9, 1, 'Left voicemail about life insurance.', '2025-06-08 22:28:02', 30, '2025-06-13 21:28:02', '2025-06-13 21:28:02'),
+(56, 198108, 9, 2, 'Interested in home coverage.', '2025-06-08 23:28:02', 150, '2025-06-13 21:28:02', '2025-06-13 21:28:02'),
+(57, 198109, 9, 3, 'Not interested at this time.', '2025-06-09 00:28:02', 60, '2025-06-13 21:28:02', '2025-06-13 21:28:02'),
+(58, 198107, 9, 1, 'Left voicemail about life insurance.', '2025-06-08 22:29:32', 30, '2025-06-13 21:29:32', '2025-06-13 21:29:32'),
+(59, 198108, 9, 2, 'Interested in home coverage.', '2025-06-08 23:29:32', 150, '2025-06-13 21:29:32', '2025-06-13 21:29:32'),
+(60, 198109, 9, 3, 'Not interested at this time.', '2025-06-09 00:29:32', 60, '2025-06-13 21:29:32', '2025-06-13 21:29:32'),
+(61, 198110, 8, 4, 'Follow-up scheduled for tomorrow.', '2025-06-09 22:29:32', 90, '2025-06-13 21:29:32', '2025-06-13 21:29:32'),
+(62, 198111, 8, 2, 'Expressed interest in health plan.', '2025-06-09 23:29:32', 120, '2025-06-13 21:29:32', '2025-06-13 21:29:32'),
+(63, 198112, 8, 1, 'No answer, left message.', '2025-06-10 00:29:32', 45, '2025-06-13 21:29:32', '2025-06-13 21:29:32'),
+(64, 198113, 2, 5, 'Service sold over the phone.', '2025-06-10 22:29:32', 180, '2025-06-13 21:29:32', '2025-06-13 21:29:32'),
+(65, 198114, 2, 6, 'Do not call again requested.', '2025-06-10 23:29:32', 20, '2025-06-13 21:29:32', '2025-06-13 21:29:32'),
+(69, 198107, 5, 1, 'Left voicemail about life insurance.', '2025-06-08 22:44:50', 30, '2025-06-13 21:44:50', '2025-06-13 21:44:50'),
+(70, 198108, 5, 2, 'Interested in home coverage.', '2025-06-08 23:44:50', 150, '2025-06-13 21:44:50', '2025-06-13 21:44:50'),
+(71, 198109, 5, 3, 'Not interested at this time.', '2025-06-09 00:44:50', 60, '2025-06-13 21:44:50', '2025-06-13 21:44:50'),
+(72, 198110, 6, 4, 'Follow-up scheduled for tomorrow.', '2025-06-09 22:44:50', 90, '2025-06-13 21:44:50', '2025-06-13 21:44:50'),
+(73, 198111, 6, 2, 'Expressed interest in health plan.', '2025-06-09 23:44:50', 120, '2025-06-13 21:44:50', '2025-06-13 21:44:50'),
+(74, 198112, 6, 1, 'No answer, left message.', '2025-06-10 00:44:50', 45, '2025-06-13 21:44:50', '2025-06-13 21:44:50'),
+(75, 198113, 7, 5, 'Service sold over the phone.', '2025-06-10 22:44:50', 180, '2025-06-13 21:44:50', '2025-06-13 21:44:50'),
+(76, 198114, 7, 6, 'Do not call again requested.', '2025-06-10 23:44:50', 20, '2025-06-13 21:44:50', '2025-06-13 21:44:50'),
+(77, 198115, 5, 2, 'Very interested in auto insurance.', '2025-06-11 22:44:50', 200, '2025-06-13 21:44:50', '2025-06-13 21:44:50'),
+(78, 198116, 6, 4, 'Will follow up next week.', '2025-06-11 23:44:50', 100, '2025-06-13 21:44:50', '2025-06-13 21:44:50'),
+(79, 198107, 5, 2, 'Lead interested in life insurance.', '2025-06-10 21:47:05', 150, '2025-06-13 21:47:05', '2025-06-13 21:47:05'),
+(80, 198108, 5, 1, 'Left voicemail.', '2025-06-10 22:47:05', 30, '2025-06-13 21:47:05', '2025-06-13 21:47:05'),
+(81, 198109, 6, 3, 'Not interested.', '2025-06-11 21:47:05', 60, '2025-06-13 21:47:05', '2025-06-13 21:47:05'),
+(82, 198110, 6, 2, 'Interested in home coverage.', '2025-06-12 21:47:05', 120, '2025-06-13 21:47:05', '2025-06-13 21:47:05'),
+(93, 198107, 5, 2, 'Expressed interest in life insurance.', '2025-06-08 21:57:49', 150, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
+(94, 198108, 5, 1, 'Left voicemail on mobile.', '2025-06-08 22:57:49', 45, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
+(95, 198109, 5, 3, 'Not interested in current offerings.', '2025-06-08 23:57:49', 60, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
+(96, 198110, 6, 4, 'Follow-up scheduled for tomorrow.', '2025-06-09 21:57:49', 90, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
+(97, 198111, 6, 2, 'Interested in home coverage.', '2025-06-09 22:57:49', 120, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
+(98, 198112, 6, 1, 'No answer, left message.', '2025-06-09 23:57:49', 30, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
+(99, 198113, 7, 5, 'Service sold after second call.', '2025-06-10 21:57:49', 200, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
+(100, 198114, 7, 6, 'Do not call again.', '2025-06-10 22:57:49', 20, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
+(101, 198115, 5, 2, 'Very interested in auto insurance.', '2025-06-11 21:57:49', 150, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
+(102, 198116, 6, 4, 'Will follow up next week.', '2025-06-11 22:57:49', 100, '2025-06-13 21:57:49', '2025-06-13 21:57:49');
 
 -- --------------------------------------------------------
 
@@ -211,6 +286,9 @@ CREATE TABLE `leads` (
 --
 
 INSERT INTO `leads` (`id`, `external_id`, `prefix`, `first_name`, `mi`, `last_name`, `phone`, `email`, `address_line`, `suite_apt`, `city`, `state`, `zip5`, `zip4`, `delivery_point_bar_code`, `carrier_route`, `fips_county_code`, `county_name`, `age`, `insurance_interest_id`, `source_id`, `status_id`, `do_not_call`, `taken_by`, `taken_at`, `created_at`, `updated_at`, `income`, `language`, `notes`) VALUES
+(1, 'lead_1', NULL, 'Alice', NULL, 'Johnson', '1234567890', 'alice.johnson@example.com', '123 Main St', NULL, 'City A', 'GA', '30001', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 1, 0, 1, '2025-06-13 19:45:00', '2025-06-13 19:45:00', '2025-06-13 19:45:00', 'D', 'E1', 'Interested in health insurance'),
+(2, 'lead_2', NULL, 'Bob', NULL, 'Williams', '2345678901', 'bob.williams@example.com', '456 Oak St', NULL, 'City B', 'GA', '30002', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 2, 1, 0, 2, '2025-06-13 19:45:00', '2025-06-13 19:45:00', '2025-06-13 19:45:00', 'C', 'S8', 'Interested in home insurance'),
+(3, 'lead_3', NULL, 'Charlie', NULL, 'Brown', '3456789012', 'charlie.brown@example.com', '789 Pine St', NULL, 'City C', 'GA', '30003', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 3, 2, 0, 1, '2025-06-13 19:45:00', '2025-06-13 19:45:00', '2025-06-13 19:45:00', 'E', 'E1', 'Not interested in insurance'),
 (198107, 'lead_682e936ce01889.79413787', 'MS', 'JANELLE', '', 'COLON', '4703992241', NULL, '15 FRANKLIN ST', 'UNIT 4', 'AVONDALE ESTATES', 'GA', '30002', '900', '42', 'C770', '13089', 'DEKALB', 46, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'D', 'E1', NULL),
 (198108, 'lead_682e936ce1a9a1.80711298', '', 'CHYNNA', 'J', 'CRUZ', '9176937257', NULL, '3352 ARCHGATE CT', '', 'ALPHARETTA', 'GA', '30004', '636', '521', 'R063', '13121', 'FULTON', 33, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'C', 'S8', NULL),
 (198109, 'lead_682e936ce1dae9.69794656', 'MR', 'MARGARITO', '', 'VARGASLOPEZ', '3055544866', NULL, '6465 ATLANTA HWY', 'LOT 3E', 'ALPHARETTA', 'GA', '30004', '707', '351', 'R146', '13121', 'FULTON', 53, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'E', 'S8', NULL),
@@ -230,7 +308,14 @@ INSERT INTO `leads` (`id`, `external_id`, `prefix`, `first_name`, `mi`, `last_na
 (198123, 'lead_682e936ce63654.69081258', 'MR', 'EUCARIS', '', 'CONTRERAS', '4048899306', NULL, '1624 DEERFIELD PT', '', 'ALPHARETTA', 'GA', '30004', '8956', '249', 'R128', '13121', 'FULTON', 52, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'D', 'S8', NULL),
 (198124, 'lead_682e936ce65247.36038052', 'MS', 'KARINA', 'I', 'CONTRERAS', '4045520678', NULL, '12881 DEER PARK LN', '', 'ALPHARETTA', 'GA', '30004', '8986', '813', 'R136', '13121', 'FULTON', 57, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'F', 'S8', NULL),
 (198125, 'lead_682e936ce66e65.11909909', 'MR', 'JUAN', 'F', 'MARTINEZ', '7705279194', NULL, '12101 CYPRESS CT', '', 'ALPHARETTA', 'GA', '30005', '3586', '19', 'R069', '13121', 'FULTON', 53, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'E', 'S8', NULL),
-(198126, 'lead_682e936ce68727.35164911', '', 'SANDRA', '', 'NAVARRO', '6512748557', NULL, '1816 ADDISON LN', '', 'ALPHARETTA', 'GA', '30005', '5001', '169', 'R055', '13121', 'FULTON', 33, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'E', 'S8', NULL);
+(198126, 'lead_682e936ce68727.35164911', '', 'SANDRA', '', 'NAVARRO', '6512748557', NULL, '1816 ADDISON LN', '', 'ALPHARETTA', 'GA', '30005', '5001', '169', 'R055', '13121', 'FULTON', 33, 4, 4, 1, 1, NULL, NULL, '2025-05-21 23:01:00', '2025-06-12 16:46:17', 'E', 'S8', NULL),
+(198131, 'lead_001', NULL, 'John', NULL, 'Doe', '5550101', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5, 1, 0, 8, '2025-06-01 10:00:00', '2025-05-20 09:00:00', '2025-06-13 16:28:26', NULL, NULL, NULL),
+(198132, 'lead_002', NULL, 'Jane', NULL, 'Smith', '5550102', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5, 1, 0, 8, '2025-06-02 11:00:00', '2025-05-21 09:00:00', '2025-06-13 16:28:26', NULL, NULL, NULL),
+(198133, 'lead_003', NULL, 'Bob', NULL, 'Johnson', '5550103', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5, 1, 0, 9, '2025-06-03 12:00:00', '2025-05-22 09:00:00', '2025-06-13 16:28:26', NULL, NULL, NULL),
+(198134, 'lead_004', NULL, 'Alice', NULL, 'Brown', '5550104', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5, 1, 0, 9, '2025-06-04 13:00:00', '2025-05-23 09:00:00', '2025-06-13 16:28:26', NULL, NULL, NULL),
+(198198, 'test_lead_010', NULL, 'Test', NULL, 'Ten', '5551110010', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 4, 1, 0, 5, '2025-06-08 21:54:51', '2025-06-13 21:54:51', '2025-06-13 21:54:51', NULL, NULL, NULL),
+(198199, 'test_lead_011', NULL, 'Test', NULL, 'Eleven', '5551110011', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 2, 4, 1, 0, 6, '2025-06-09 21:54:51', '2025-06-13 21:54:51', '2025-06-13 21:54:51', NULL, NULL, NULL),
+(198200, 'test_lead_012', NULL, 'Test', NULL, 'Twelve', '5551110012', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 3, 4, 1, 0, 7, '2025-06-10 21:54:51', '2025-06-13 21:54:51', '2025-06-13 21:54:51', NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -270,6 +355,14 @@ CREATE TABLE `lead_locks` (
   `expires_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--
+-- Dumping data for table `lead_locks`
+--
+
+INSERT INTO `lead_locks` (`lead_id`, `user_id`, `locked_at`, `expires_at`) VALUES
+(198125, 5, '2025-06-13 07:52:27', '2025-06-13 13:57:27'),
+(198126, 5, '2025-06-13 10:33:43', '2025-06-13 16:38:43');
+
 -- --------------------------------------------------------
 
 --
@@ -292,7 +385,8 @@ INSERT INTO `lead_sources` (`id`, `name`, `description`, `active`, `created_at`)
 (1, 'Web Form', 'Captura web', 1, '2025-05-14 18:06:03'),
 (2, 'Event', 'Evento presencial', 1, '2025-05-14 18:06:03'),
 (3, 'Referral', 'Recomendación', 1, '2025-05-14 18:06:03'),
-(4, 'Purchased Leads', 'Paquete de leads comprados', 1, '2025-05-15 13:21:45');
+(4, 'Purchased Leads', 'Paquete de leads comprados', 1, '2025-05-15 13:21:45'),
+(5, 'Sample Source', 'Used for testing', 1, '2025-06-13 16:28:26');
 
 -- --------------------------------------------------------
 
@@ -342,7 +436,8 @@ INSERT INTO `roles` (`id`, `name`, `description`, `created_at`) VALUES
 (1, 'admin', 'Acceso completo', '2025-05-14 18:06:03'),
 (2, 'lead_manager', 'Gestión de leads', '2025-05-14 18:06:03'),
 (3, 'sales', 'Representante de ventas', '2025-05-14 18:06:03'),
-(4, 'viewer', 'Solo lectura', '2025-05-14 18:06:03');
+(4, 'viewer', 'Solo lectura', '2025-05-14 18:06:03'),
+(5, 'owner', 'Project owner.', '2025-06-12 12:24:01');
 
 -- --------------------------------------------------------
 
@@ -365,9 +460,20 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `status`, `created_at`, `updated_at`) VALUES
+(1, 'John Doe', 'johndoe@example.com', '$2y$10$WUXqsEhY/tuSyUVuyzxfbOdk5lyIS7u6moL1Y8VOucX.Ve.R0aene', 'active', '2025-06-13 19:45:00', '2025-06-13 19:45:00'),
+(2, 'Jane Smith', 'janesmith@example.com', '$2y$10$WUXqsEhY/tuSyUVuyzxfbOdk5lyIS7u6moL1Y8VOucX.Ve.R0aene', 'active', '2025-06-13 19:45:00', '2025-06-13 19:45:00'),
 (4, 'Dave Viewer', 'dave@empresa.local', '$2y$10$4BlrP0.lA1vu18Vr6I93r.baMXZGVdhGm8GuIes84qBAW7BFcKEDW', 'active', '2025-05-14 18:06:03', '2025-05-19 21:57:03'),
 (5, 'Enmanuel Domínguez', 'enmandom@gmail.com', '$2y$10$1R/sc2snF3ISAX5BdiD7VeY/PW.Sn0ANz8d91OeX9/UvWmPiZWJ9y', 'active', '2025-05-14 22:50:54', '2025-05-14 22:50:54'),
-(6, 'enmagent', 'bluefang05@gmail.com', '$2y$10$WUXqsEhY/tuSyUVuyzxfbOdk5lyIS7u6moL1Y8VOucX.Ve.R0aene', 'active', '2025-05-19 15:22:39', '2025-05-19 21:30:53');
+(6, 'enmagent', 'bluefang05@gmail.com', '$2y$10$WUXqsEhY/tuSyUVuyzxfbOdk5lyIS7u6moL1Y8VOucX.Ve.R0aene', 'active', '2025-05-19 15:22:39', '2025-05-19 21:30:53'),
+(7, 'Mami Boss', 'mami@empresa.local', '$2y$10$4BlrP0.lA1vu18Vr6I93r.baMXZGVdhGm8GuIes84qBAW7BFcKEDW', 'active', '2025-06-13 16:25:30', '2025-06-13 16:25:30'),
+(8, 'Manuel Sales', 'manuel@empresa.local', '$2y$10$4BlrP0.lA1vu18Vr6I93r.baMXZGVdhGm8GuIes84qBAW7BFcKEDW', 'active', '2025-06-13 16:25:30', '2025-06-13 16:25:30'),
+(9, 'Carlos Caller', 'carlos@empresa.local', '$2y$10$4BlrP0.lA1vu18Vr6I93r.baMXZGVdhGm8GuIes84qBAW7BFcKEDW', 'active', '2025-06-13 16:25:30', '2025-06-13 16:25:30'),
+(12, 'Carlos Caller', 'carlos.caller@example.com', '$2y$10$WUXqsEhY/tuSyUVuyzxfbOdk5lyIS7u6moL1Y8VOucX.Ve.R0aene', 'active', '2025-06-13 19:58:07', '2025-06-13 19:58:07'),
+(13, 'Manuel Sales', 'manuel.sales@example.com', '$2y$10$WUXqsEhY/tuSyUVuyzxfbOdk5lyIS7u6moL1Y8VOucX.Ve.R0aene', 'active', '2025-06-13 19:58:07', '2025-06-13 19:58:07'),
+(14, 'Agent Alpha', 'alpha@test.local', '$2y$10$dummyhash1234567890', 'active', '2025-06-13 21:10:32', '2025-06-13 21:10:32'),
+(15, 'Agent Beta', 'beta@test.local', '$2y$10$dummyhash1234567890', 'active', '2025-06-13 21:10:32', '2025-06-13 21:10:32'),
+(16, 'Agent Gamma', 'gamma@test.local', '$2y$10$dummyhash1234567890', 'active', '2025-06-13 21:10:32', '2025-06-13 21:10:32'),
+(17, 'Agent Delta', 'delta@test.local', '$2y$10$dummyhash1234567890', 'active', '2025-06-13 21:10:32', '2025-06-13 21:10:32');
 
 -- --------------------------------------------------------
 
@@ -385,9 +491,13 @@ CREATE TABLE `user_roles` (
 --
 
 INSERT INTO `user_roles` (`user_id`, `role_id`) VALUES
+(1, 5),
 (4, 2),
 (5, 1),
-(6, 3);
+(6, 3),
+(7, 5),
+(8, 3),
+(9, 3);
 
 --
 -- Indexes for dumped tables
@@ -513,7 +623,7 @@ ALTER TABLE `audit_logs`
 -- AUTO_INCREMENT for table `dispositions`
 --
 ALTER TABLE `dispositions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `insurance_interests`
@@ -525,13 +635,13 @@ ALTER TABLE `insurance_interests`
 -- AUTO_INCREMENT for table `interactions`
 --
 ALTER TABLE `interactions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=103;
 
 --
 -- AUTO_INCREMENT for table `leads`
 --
 ALTER TABLE `leads`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=198127;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=198201;
 
 --
 -- AUTO_INCREMENT for table `lead_documents`
@@ -543,7 +653,7 @@ ALTER TABLE `lead_documents`
 -- AUTO_INCREMENT for table `lead_sources`
 --
 ALTER TABLE `lead_sources`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `lead_statuses`
@@ -555,13 +665,13 @@ ALTER TABLE `lead_statuses`
 -- AUTO_INCREMENT for table `roles`
 --
 ALTER TABLE `roles`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=33;
 
 --
 -- Constraints for dumped tables

@@ -1,6 +1,5 @@
 <?php
 // calls/add.php
-
 require_once __DIR__ . '/../lib/Auth.php';
 require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/LeadLock.php';
@@ -60,9 +59,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'duration_seconds' => $_POST['duration_seconds'] ?? null,
     ]);
 
-    // Release lock after saving the call
-    LeadLock::release($leadId, $user['id']);
+    // Set do_not_call flag if checkbox was selected
+    if (!empty($_POST['do_not_call'])) {
+        $stmt = $pdo->prepare("UPDATE leads SET do_not_call = 1 WHERE id = ?");
+        $stmt->execute([$leadId]);
+    }
 
+    LeadLock::release($leadId, $user['id']);
     header('Location: list.php');
     exit;
 }
@@ -111,8 +114,7 @@ $interactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <meta charset="UTF-8">
     <title>Register Call &mdash; Lead #<?= htmlspecialchars($leadId) ?></title>
     <link rel="stylesheet" href="./../assets/css/app.css">
-    <link rel="stylesheet"
-          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"> 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"> 
 </head>
 <body>
     <div class="container">
@@ -124,14 +126,10 @@ $interactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <strong>Phone:</strong>
                     <span id="phone-number"><?= htmlspecialchars($phoneNumber) ?></span>
                 </div>
-                <button type="button" class="btn"
-                        style="background-color:#4caf50;color:white;margin-right:10px;"
-                        onclick="copyToClipboard()">
+                <button type="button" class="btn" style="background-color:#4caf50;color:white;margin-right:10px;" onclick="copyToClipboard()">
                     <i class="fas fa-copy"></i> Copy Number
                 </button>
-                <a href="https://panel.mightycall.com/WebPhoneApp/#!/separate_view?callto=<?= rawurlencode($internationalNumber) ?>" 
-                   target="_blank" class="btn"
-                   style="background-color:#2196f3;color:white;">
+                <a href="https://panel.mightycall.com/WebPhoneApp/#!/separate_view?callto=<?= rawurlencode($internationalNumber) ?>" target="_blank" class="btn" style="background-color:#2196f3;color:white;"> 
                     <i class="fas fa-phone"></i> MightyCall
                 </a>
             </div>
@@ -168,10 +166,8 @@ $interactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <?php endif; ?>
 
         <form method="post">
-            <input type="hidden" name="csrf_token"
-                   value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-            <input type="hidden" name="lead_id"
-                   value="<?= htmlspecialchars($leadId) ?>">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+            <input type="hidden" name="lead_id" value="<?= htmlspecialchars($leadId) ?>">
 
             <div class="form-group">
                 <label for="disposition_id"><i class="fas fa-check-circle"></i> Call Outcome</label>
@@ -213,14 +209,19 @@ $interactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             <div class="form-group">
                 <label for="duration_seconds"><i class="fas fa-stopwatch"></i> Duration (seconds)</label>
-                <input required type="number" id="duration_seconds" name="duration_seconds"
-                       class="form-control" placeholder="E.g.: 60">
+                <input required type="number" id="duration_seconds" name="duration_seconds" class="form-control" placeholder="E.g.: 60">
             </div>
 
             <div class="form-group">
                 <label for="notes"><i class="fas fa-sticky-note"></i> Additional Notes</label>
-                <textarea required id="notes" name="notes" rows="5" class="form-control"
-                          placeholder="Conversation details..."></textarea>
+                <textarea required id="notes" name="notes" rows="5" class="form-control" placeholder="Conversation details..."></textarea>
+            </div>
+
+            <!-- Checkbox added here -->
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="do_not_call" value="1"> Mark this lead as Do Not Call
+                </label>
             </div>
 
             <button type="submit" class="btn"><i class="fas fa-save"></i> Save Call</button>
@@ -240,7 +241,6 @@ $interactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
             if (!text.startsWith('+1')) {
                 text = '+1' + text;
             }
-
             navigator.clipboard.writeText(text)
                 .then(() => {
                     el.classList.add('copied');
@@ -256,9 +256,8 @@ $interactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
             const select = document.getElementById('note_template');
             const textarea = document.getElementById('notes');
             const selectedText = select.value;
-
             if (selectedText) {
-                textarea.value += (textarea.value ? '\n\n' : '') + selectedText;
+                textarea.value += (textarea.value ? '\n' : '') + selectedText;
             }
         }
     </script>
