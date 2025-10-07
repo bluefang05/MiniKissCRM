@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 14, 2025 at 03:59 AM
+-- Generation Time: Jul 17, 2025 at 02:31 AM
 -- Server version: 10.4.22-MariaDB
 -- PHP Version: 8.1.2
 
@@ -221,7 +221,21 @@ INSERT INTO `interactions` (`id`, `lead_id`, `user_id`, `disposition_id`, `notes
 (99, 198113, 7, 5, 'Service sold after second call.', '2025-06-10 21:57:49', 200, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
 (100, 198114, 7, 6, 'Do not call again.', '2025-06-10 22:57:49', 20, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
 (101, 198115, 5, 2, 'Very interested in auto insurance.', '2025-06-11 21:57:49', 150, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
-(102, 198116, 6, 4, 'Will follow up next week.', '2025-06-11 22:57:49', 100, '2025-06-13 21:57:49', '2025-06-13 21:57:49');
+(102, 198116, 6, 4, 'Will follow up next week.', '2025-06-11 22:57:49', 100, '2025-06-13 21:57:49', '2025-06-13 21:57:49'),
+(103, 198201, 5, 5, 'Successfully sold life insurance.', '2025-06-15 00:30:35', NULL, '2025-06-15 00:30:35', '2025-06-15 00:30:35'),
+(104, 198200, 5, 6, 'Customer requested no further calls.', '2025-06-15 00:30:35', NULL, '2025-06-15 00:30:35', '2025-06-15 00:30:35'),
+(105, 198199, 5, 3, 'Not interested at this time.', '2025-06-15 00:30:35', NULL, '2025-06-15 00:30:35', '2025-06-15 00:30:35'),
+(106, 198198, 5, 4, 'Will follow up next week.', '2025-06-15 00:30:35', NULL, '2025-06-15 00:30:35', '2025-06-15 00:30:35'),
+(113, 198205, 5, 2, 'Initial call: Interested', '2025-06-08 00:34:52', NULL, '2025-06-15 00:34:52', '2025-06-15 00:34:52'),
+(114, 198205, 5, 5, 'Finalized sale over the phone.', '2025-06-15 00:34:52', NULL, '2025-06-15 00:34:52', '2025-06-15 00:34:52'),
+(117, 198207, 5, 2, 'Initial call: Interested', '2025-06-08 00:40:11', NULL, '2025-06-15 00:40:11', '2025-06-15 00:40:11'),
+(118, 198207, 5, 5, 'Finalized sale over the phone.', '2025-06-15 00:40:11', NULL, '2025-06-15 00:40:11', '2025-06-15 00:40:11'),
+(119, 198208, 5, 5, 'Successfully sold life insurance.', '2025-06-14 00:44:11', NULL, '2025-06-15 00:44:11', '2025-06-15 00:44:11'),
+(120, 198211, 5, 3, 'Customer not interested.', '2025-06-13 00:44:11', NULL, '2025-06-15 00:44:11', '2025-06-15 00:44:11'),
+(121, 198209, 9, 6, 'Asked not to be contacted again.', '2025-06-12 00:44:11', NULL, '2025-06-15 00:44:11', '2025-06-15 00:44:11'),
+(122, 198212, 9, 2, 'Interested in health coverage.', '2025-06-11 00:44:11', NULL, '2025-06-15 00:44:11', '2025-06-15 00:44:11'),
+(123, 198210, 8, 4, 'Will follow up next week.', '2025-06-10 00:44:11', NULL, '2025-06-15 00:44:11', '2025-06-15 00:44:11'),
+(124, 198213, 8, 5, 'Sold home insurance policy.', '2025-06-09 00:44:11', NULL, '2025-06-15 00:44:11', '2025-06-15 00:44:11');
 
 -- --------------------------------------------------------
 
@@ -270,7 +284,6 @@ CREATE TABLE `leads` (
   `age` int(11) DEFAULT NULL,
   `insurance_interest_id` int(11) DEFAULT NULL,
   `source_id` int(11) NOT NULL,
-  `status_id` int(11) NOT NULL DEFAULT 1,
   `do_not_call` tinyint(1) NOT NULL DEFAULT 0,
   `taken_by` int(11) DEFAULT NULL,
   `taken_at` datetime DEFAULT NULL,
@@ -278,44 +291,57 @@ CREATE TABLE `leads` (
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `income` varchar(10) DEFAULT NULL,
   `language` varchar(10) DEFAULT NULL,
-  `notes` text DEFAULT NULL
+  `notes` text DEFAULT NULL,
+  `uploaded_by` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
 -- Dumping data for table `leads`
 --
 
-INSERT INTO `leads` (`id`, `external_id`, `prefix`, `first_name`, `mi`, `last_name`, `phone`, `email`, `address_line`, `suite_apt`, `city`, `state`, `zip5`, `zip4`, `delivery_point_bar_code`, `carrier_route`, `fips_county_code`, `county_name`, `age`, `insurance_interest_id`, `source_id`, `status_id`, `do_not_call`, `taken_by`, `taken_at`, `created_at`, `updated_at`, `income`, `language`, `notes`) VALUES
-(1, 'lead_1', NULL, 'Alice', NULL, 'Johnson', '1234567890', 'alice.johnson@example.com', '123 Main St', NULL, 'City A', 'GA', '30001', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 1, 0, 1, '2025-06-13 19:45:00', '2025-06-13 19:45:00', '2025-06-13 19:45:00', 'D', 'E1', 'Interested in health insurance'),
-(2, 'lead_2', NULL, 'Bob', NULL, 'Williams', '2345678901', 'bob.williams@example.com', '456 Oak St', NULL, 'City B', 'GA', '30002', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 2, 1, 0, 2, '2025-06-13 19:45:00', '2025-06-13 19:45:00', '2025-06-13 19:45:00', 'C', 'S8', 'Interested in home insurance'),
-(3, 'lead_3', NULL, 'Charlie', NULL, 'Brown', '3456789012', 'charlie.brown@example.com', '789 Pine St', NULL, 'City C', 'GA', '30003', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 3, 2, 0, 1, '2025-06-13 19:45:00', '2025-06-13 19:45:00', '2025-06-13 19:45:00', 'E', 'E1', 'Not interested in insurance'),
-(198107, 'lead_682e936ce01889.79413787', 'MS', 'JANELLE', '', 'COLON', '4703992241', NULL, '15 FRANKLIN ST', 'UNIT 4', 'AVONDALE ESTATES', 'GA', '30002', '900', '42', 'C770', '13089', 'DEKALB', 46, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'D', 'E1', NULL),
-(198108, 'lead_682e936ce1a9a1.80711298', '', 'CHYNNA', 'J', 'CRUZ', '9176937257', NULL, '3352 ARCHGATE CT', '', 'ALPHARETTA', 'GA', '30004', '636', '521', 'R063', '13121', 'FULTON', 33, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'C', 'S8', NULL),
-(198109, 'lead_682e936ce1dae9.69794656', 'MR', 'MARGARITO', '', 'VARGASLOPEZ', '3055544866', NULL, '6465 ATLANTA HWY', 'LOT 3E', 'ALPHARETTA', 'GA', '30004', '707', '351', 'R146', '13121', 'FULTON', 53, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'E', 'S8', NULL),
-(198110, 'lead_682e936ce20491.54893928', 'MS', 'JAZMINE', '', 'ECHEVARRIA', '7703314132', NULL, '1513 OLD JONES RD', '', 'ALPHARETTA', 'GA', '30004', '2319', '134', 'R117', '13121', 'FULTON', 23, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'D', 'E1', NULL),
-(198111, 'lead_682e936ce40f76.27301633', 'MS', 'PATRICIA', '', 'GARCIA', '4045141050', NULL, '14295 BIRMINGHAM HWY', '', 'ALPHARETTA', 'GA', '30004', '3018', '957', 'R024', '13121', 'FULTON', 54, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'C', 'E1', NULL),
-(198112, 'lead_682e936ce43c71.21248717', 'MR', 'HECTOR', '', 'CASANOVA', '7704809554', NULL, '6465 ATLANTA HWY', 'LOT 4H', 'ALPHARETTA', 'GA', '30004', '3334', '488', 'R146', '13121', 'FULTON', 35, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'C', 'S8', NULL),
-(198113, 'lead_682e936ce47b46.45100126', 'MR', 'REINALDO', '', 'DA HORA', '6784995489', NULL, '602 MCFARLAND 400 DR', '', 'ALPHARETTA', 'GA', '30004', '3374', '24', 'R106', '13121', 'FULTON', 22, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'E', 'S8', NULL),
-(198114, 'lead_682e936ce4bb39.70784771', 'MR', 'FRANCISCO', '', 'HERRERA', '6302352514', NULL, '8185 INDUSTRIAL PL', '', 'ALPHARETTA', 'GA', '30004', '3381', '855', 'R106', '13121', 'FULTON', 48, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'E', 'S8', NULL),
-(198115, 'lead_682e936ce4ea79.10205495', 'MR', 'ANDRES', '', 'MARTINEZ', '4043758508', NULL, '20218 DEER TRL', '', 'ALPHARETTA', 'GA', '30004', '5017', '181', 'R110', '13121', 'FULTON', 53, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'E', 'S8', NULL),
-(198116, 'lead_682e936ce51a56.74433612', 'MS', 'ANNA', '', 'ALONSO', '8133357394', NULL, '22001 DEER TRL', '', 'ALPHARETTA', 'GA', '30004', '5085', '14', 'R110', '13121', 'FULTON', 45, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'D', 'E1', NULL),
-(198117, 'lead_682e936ce54ed3.42679338', 'MR', 'JORGE', '', 'RUIZ', '2292919907', NULL, '2014 LAKE UNION HILL WAY', '', 'ALPHARETTA', 'GA', '30004', '7457', '145', 'R126', '13121', 'FULTON', 52, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'E', 'S8', NULL),
-(198118, 'lead_682e936ce57aa4.72185817', 'MS', 'BEATRIZ', '', 'VILLALBA', '4049404380', NULL, '13250 KEMPER RD', '', 'ALPHARETTA', 'GA', '30004', '7637', '505', 'R136', '13121', 'FULTON', 56, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'F', 'S8', NULL),
-(198119, 'lead_682e936ce5a871.06068638', 'MS', 'ALEJANDRA', '', 'CARRAU', '4049063991', NULL, '3322 DEER TRL', '', 'ALPHARETTA', 'GA', '30004', '8562', '228', 'R110', '13121', 'FULTON', 46, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'D', 'S8', NULL),
-(198120, 'lead_682e936ce5d5b7.01607310', 'MS', 'ANGELICA', '', 'JIMENEZ', '5162506785', NULL, '7102 DEER CREEK PL', '', 'ALPHARETTA', 'GA', '30004', '5034', '29', 'R149', '13121', 'FULTON', 40, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'D', 'S8', NULL),
-(198121, 'lead_682e936ce5f782.24685594', '', 'CHRIS', 'M', 'DIAZ', '2544991606', NULL, '10325 DEER TRL', '', 'ALPHARETTA', 'GA', '30004', '8586', '259', 'R110', '13121', 'FULTON', 40, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'E', 'E1', NULL),
-(198122, 'lead_682e936ce61749.00399265', 'MR', 'JOSE', '', 'RAMIREZ', '6784997518', NULL, '735 DEERFIELD PT', '', 'ALPHARETTA', 'GA', '30004', '8937', '358', 'R128', '13121', 'FULTON', 50, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'C', 'S8', NULL),
-(198123, 'lead_682e936ce63654.69081258', 'MR', 'EUCARIS', '', 'CONTRERAS', '4048899306', NULL, '1624 DEERFIELD PT', '', 'ALPHARETTA', 'GA', '30004', '8956', '249', 'R128', '13121', 'FULTON', 52, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'D', 'S8', NULL),
-(198124, 'lead_682e936ce65247.36038052', 'MS', 'KARINA', 'I', 'CONTRERAS', '4045520678', NULL, '12881 DEER PARK LN', '', 'ALPHARETTA', 'GA', '30004', '8986', '813', 'R136', '13121', 'FULTON', 57, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'F', 'S8', NULL),
-(198125, 'lead_682e936ce66e65.11909909', 'MR', 'JUAN', 'F', 'MARTINEZ', '7705279194', NULL, '12101 CYPRESS CT', '', 'ALPHARETTA', 'GA', '30005', '3586', '19', 'R069', '13121', 'FULTON', 53, 4, 4, 1, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-05-21 23:01:00', 'E', 'S8', NULL),
-(198126, 'lead_682e936ce68727.35164911', '', 'SANDRA', '', 'NAVARRO', '6512748557', NULL, '1816 ADDISON LN', '', 'ALPHARETTA', 'GA', '30005', '5001', '169', 'R055', '13121', 'FULTON', 33, 4, 4, 1, 1, NULL, NULL, '2025-05-21 23:01:00', '2025-06-12 16:46:17', 'E', 'S8', NULL),
-(198131, 'lead_001', NULL, 'John', NULL, 'Doe', '5550101', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5, 1, 0, 8, '2025-06-01 10:00:00', '2025-05-20 09:00:00', '2025-06-13 16:28:26', NULL, NULL, NULL),
-(198132, 'lead_002', NULL, 'Jane', NULL, 'Smith', '5550102', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5, 1, 0, 8, '2025-06-02 11:00:00', '2025-05-21 09:00:00', '2025-06-13 16:28:26', NULL, NULL, NULL),
-(198133, 'lead_003', NULL, 'Bob', NULL, 'Johnson', '5550103', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5, 1, 0, 9, '2025-06-03 12:00:00', '2025-05-22 09:00:00', '2025-06-13 16:28:26', NULL, NULL, NULL),
-(198134, 'lead_004', NULL, 'Alice', NULL, 'Brown', '5550104', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5, 1, 0, 9, '2025-06-04 13:00:00', '2025-05-23 09:00:00', '2025-06-13 16:28:26', NULL, NULL, NULL),
-(198198, 'test_lead_010', NULL, 'Test', NULL, 'Ten', '5551110010', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 4, 1, 0, 5, '2025-06-08 21:54:51', '2025-06-13 21:54:51', '2025-06-13 21:54:51', NULL, NULL, NULL),
-(198199, 'test_lead_011', NULL, 'Test', NULL, 'Eleven', '5551110011', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 2, 4, 1, 0, 6, '2025-06-09 21:54:51', '2025-06-13 21:54:51', '2025-06-13 21:54:51', NULL, NULL, NULL),
-(198200, 'test_lead_012', NULL, 'Test', NULL, 'Twelve', '5551110012', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 3, 4, 1, 0, 7, '2025-06-10 21:54:51', '2025-06-13 21:54:51', '2025-06-13 21:54:51', NULL, NULL, NULL);
+INSERT INTO `leads` (`id`, `external_id`, `prefix`, `first_name`, `mi`, `last_name`, `phone`, `email`, `address_line`, `suite_apt`, `city`, `state`, `zip5`, `zip4`, `delivery_point_bar_code`, `carrier_route`, `fips_county_code`, `county_name`, `age`, `insurance_interest_id`, `source_id`, `do_not_call`, `taken_by`, `taken_at`, `created_at`, `updated_at`, `income`, `language`, `notes`, `uploaded_by`) VALUES
+(1, 'lead_1', NULL, 'Alice', NULL, 'Johnson', '1234567890', 'alice.johnson@example.com', '123 Main St', NULL, 'City A', 'GA', '30001', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 0, 1, '2025-06-13 19:45:00', '2025-06-13 19:45:00', '2025-07-16 18:49:16', 'D', 'E1', 'Interested in health insurance', 5),
+(2, 'lead_2', NULL, 'Bob', NULL, 'Williams', '2345678901', 'bob.williams@example.com', '456 Oak St', NULL, 'City B', 'GA', '30002', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 2, 0, 2, '2025-06-13 19:45:00', '2025-06-13 19:45:00', '2025-07-16 18:49:16', 'C', 'S8', 'Interested in home insurance', 5),
+(3, 'lead_3', NULL, 'Charlie', NULL, 'Brown', '3456789012', 'charlie.brown@example.com', '789 Pine St', NULL, 'City C', 'GA', '30003', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 3, 0, 1, '2025-06-13 19:45:00', '2025-06-13 19:45:00', '2025-07-16 18:49:16', 'E', 'E1', 'Not interested in insurance', 5),
+(198107, 'lead_682e936ce01889.79413787', 'MS', 'JANELLE', '', 'COLON', '4703992241', NULL, '15 FRANKLIN ST', 'UNIT 4', 'AVONDALE ESTATES', 'GA', '30002', '900', '42', 'C770', '13089', 'DEKALB', 46, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'D', 'E1', NULL, 5),
+(198108, 'lead_682e936ce1a9a1.80711298', '', 'CHYNNA', 'J', 'CRUZ', '9176937257', NULL, '3352 ARCHGATE CT', '', 'ALPHARETTA', 'GA', '30004', '636', '521', 'R063', '13121', 'FULTON', 33, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'C', 'S8', NULL, 5),
+(198109, 'lead_682e936ce1dae9.69794656', 'MR', 'MARGARITO', '', 'VARGASLOPEZ', '3055544866', NULL, '6465 ATLANTA HWY', 'LOT 3E', 'ALPHARETTA', 'GA', '30004', '707', '351', 'R146', '13121', 'FULTON', 53, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'E', 'S8', NULL, 5),
+(198110, 'lead_682e936ce20491.54893928', 'MS', 'JAZMINE', '', 'ECHEVARRIA', '7703314132', NULL, '1513 OLD JONES RD', '', 'ALPHARETTA', 'GA', '30004', '2319', '134', 'R117', '13121', 'FULTON', 23, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'D', 'E1', NULL, 5),
+(198111, 'lead_682e936ce40f76.27301633', 'MS', 'PATRICIA', '', 'GARCIA', '4045141050', NULL, '14295 BIRMINGHAM HWY', '', 'ALPHARETTA', 'GA', '30004', '3018', '957', 'R024', '13121', 'FULTON', 54, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'C', 'E1', NULL, 5),
+(198112, 'lead_682e936ce43c71.21248717', 'MR', 'HECTOR', '', 'CASANOVA', '7704809554', NULL, '6465 ATLANTA HWY', 'LOT 4H', 'ALPHARETTA', 'GA', '30004', '3334', '488', 'R146', '13121', 'FULTON', 35, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'C', 'S8', NULL, 5),
+(198113, 'lead_682e936ce47b46.45100126', 'MR', 'REINALDO', '', 'DA HORA', '6784995489', NULL, '602 MCFARLAND 400 DR', '', 'ALPHARETTA', 'GA', '30004', '3374', '24', 'R106', '13121', 'FULTON', 22, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'E', 'S8', NULL, 5),
+(198114, 'lead_682e936ce4bb39.70784771', 'MR', 'FRANCISCO', '', 'HERRERA', '6302352514', NULL, '8185 INDUSTRIAL PL', '', 'ALPHARETTA', 'GA', '30004', '3381', '855', 'R106', '13121', 'FULTON', 48, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'E', 'S8', NULL, 5),
+(198115, 'lead_682e936ce4ea79.10205495', 'MR', 'ANDRES', '', 'MARTINEZ', '4043758508', NULL, '20218 DEER TRL', '', 'ALPHARETTA', 'GA', '30004', '5017', '181', 'R110', '13121', 'FULTON', 53, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'E', 'S8', NULL, 5),
+(198116, 'lead_682e936ce51a56.74433612', 'MS', 'ANNA', '', 'ALONSO', '8133357394', NULL, '22001 DEER TRL', '', 'ALPHARETTA', 'GA', '30004', '5085', '14', 'R110', '13121', 'FULTON', 45, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'D', 'E1', NULL, 5),
+(198117, 'lead_682e936ce54ed3.42679338', 'MR', 'JORGE', '', 'RUIZ', '2292919907', NULL, '2014 LAKE UNION HILL WAY', '', 'ALPHARETTA', 'GA', '30004', '7457', '145', 'R126', '13121', 'FULTON', 52, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'E', 'S8', NULL, 5),
+(198118, 'lead_682e936ce57aa4.72185817', 'MS', 'BEATRIZ', '', 'VILLALBA', '4049404380', NULL, '13250 KEMPER RD', '', 'ALPHARETTA', 'GA', '30004', '7637', '505', 'R136', '13121', 'FULTON', 56, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'F', 'S8', NULL, 5),
+(198119, 'lead_682e936ce5a871.06068638', 'MS', 'ALEJANDRA', '', 'CARRAU', '4049063991', NULL, '3322 DEER TRL', '', 'ALPHARETTA', 'GA', '30004', '8562', '228', 'R110', '13121', 'FULTON', 46, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'D', 'S8', NULL, 5),
+(198120, 'lead_682e936ce5d5b7.01607310', 'MS', 'ANGELICA', '', 'JIMENEZ', '5162506785', NULL, '7102 DEER CREEK PL', '', 'ALPHARETTA', 'GA', '30004', '5034', '29', 'R149', '13121', 'FULTON', 40, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'D', 'S8', NULL, 5),
+(198121, 'lead_682e936ce5f782.24685594', '', 'CHRIS', 'M', 'DIAZ', '2544991606', NULL, '10325 DEER TRL', '', 'ALPHARETTA', 'GA', '30004', '8586', '259', 'R110', '13121', 'FULTON', 40, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'E', 'E1', NULL, 5),
+(198122, 'lead_682e936ce61749.00399265', 'MR', 'JOSE', '', 'RAMIREZ', '6784997518', NULL, '735 DEERFIELD PT', '', 'ALPHARETTA', 'GA', '30004', '8937', '358', 'R128', '13121', 'FULTON', 50, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'C', 'S8', NULL, 5),
+(198123, 'lead_682e936ce63654.69081258', 'MR', 'EUCARIS', '', 'CONTRERAS', '4048899306', NULL, '1624 DEERFIELD PT', '', 'ALPHARETTA', 'GA', '30004', '8956', '249', 'R128', '13121', 'FULTON', 52, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'D', 'S8', NULL, 5),
+(198124, 'lead_682e936ce65247.36038052', 'MS', 'KARINA', 'I', 'CONTRERAS', '4045520678', NULL, '12881 DEER PARK LN', '', 'ALPHARETTA', 'GA', '30004', '8986', '813', 'R136', '13121', 'FULTON', 57, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'F', 'S8', NULL, 5),
+(198125, 'lead_682e936ce66e65.11909909', 'MR', 'JUAN', 'F', 'MARTINEZ', '7705279194', NULL, '12101 CYPRESS CT', '', 'ALPHARETTA', 'GA', '30005', '3586', '19', 'R069', '13121', 'FULTON', 53, 4, 4, 0, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'E', 'S8', NULL, 5),
+(198126, 'lead_682e936ce68727.35164911', '', 'SANDRA', '', 'NAVARRO', '6512748557', NULL, '1816 ADDISON LN', '', 'ALPHARETTA', 'GA', '30005', '5001', '169', 'R055', '13121', 'FULTON', 33, 4, 4, 1, NULL, NULL, '2025-05-21 23:01:00', '2025-07-16 18:49:16', 'E', 'S8', NULL, 5),
+(198131, 'lead_001', NULL, 'John', NULL, 'Doe', '5550101', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5, 0, 8, '2025-06-01 10:00:00', '2025-05-20 09:00:00', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198132, 'lead_002', NULL, 'Jane', NULL, 'Smith', '5550102', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5, 0, 8, '2025-06-02 11:00:00', '2025-05-21 09:00:00', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198133, 'lead_003', NULL, 'Bob', NULL, 'Johnson', '5550103', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5, 0, 9, '2025-06-03 12:00:00', '2025-05-22 09:00:00', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198134, 'lead_004', NULL, 'Alice', NULL, 'Brown', '5550104', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5, 0, 9, '2025-06-04 13:00:00', '2025-05-23 09:00:00', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198198, 'test_lead_010', NULL, 'Test', NULL, 'Ten', '5551110010', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 4, 0, 5, '2025-06-08 21:54:51', '2025-06-13 21:54:51', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198199, 'test_lead_011', NULL, 'Test', NULL, 'Eleven', '5551110011', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 2, 4, 0, 6, '2025-06-09 21:54:51', '2025-06-13 21:54:51', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198200, 'test_lead_012', NULL, 'Test', NULL, 'Twelve', '5551110012', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 3, 4, 0, 7, '2025-06-10 21:54:51', '2025-06-13 21:54:51', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198201, 'lead_010', NULL, 'John', NULL, 'Doe', '5550101', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 4, 0, 5, '2025-06-15 00:30:35', '2025-06-15 00:30:35', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198202, 'lead_011', NULL, 'Jane', NULL, 'Smith', '5550102', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 2, 4, 0, 5, '2025-06-15 00:30:35', '2025-06-15 00:30:35', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198203, 'lead_012', NULL, 'Bob', NULL, 'Johnson', '5550103', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 3, 4, 0, 5, '2025-06-15 00:30:35', '2025-06-15 00:30:35', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198204, 'lead_013', NULL, 'Alice', NULL, 'Brown', '5550104', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 4, 4, 0, 5, '2025-06-15 00:30:35', '2025-06-15 00:30:35', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198205, 'lead_test_001', NULL, 'John', NULL, 'Doe', '5550101', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, 4, 0, 5, '2025-06-15 00:34:52', '2025-06-15 00:34:52', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198207, 'lead_test_042', NULL, 'John', NULL, 'Doe', '5550101', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 4, 4, 0, 5, '2025-06-15 00:40:11', '2025-06-15 00:40:11', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198208, 'test_lead_101', NULL, 'John', NULL, 'Doe', '5550101', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 4, 4, 0, 5, '2025-06-15 00:44:11', '2025-06-15 00:44:11', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198209, 'test_lead_102', NULL, 'Jane', NULL, 'Smith', '5550102', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 4, 4, 0, 9, '2025-06-15 00:44:11', '2025-06-15 00:44:11', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198210, 'test_lead_103', NULL, 'Bob', NULL, 'Johnson', '5550103', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 4, 4, 0, 8, '2025-06-15 00:44:11', '2025-06-15 00:44:11', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198211, 'test_lead_104', NULL, 'Alice', NULL, 'Brown', '5550104', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 4, 4, 0, 5, '2025-06-15 00:44:11', '2025-06-15 00:44:11', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198212, 'test_lead_105', NULL, 'Charlie', NULL, 'Davis', '5550105', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 4, 4, 0, 9, '2025-06-15 00:44:11', '2025-06-15 00:44:11', '2025-07-16 18:49:16', NULL, NULL, NULL, 5),
+(198213, 'test_lead_106', NULL, 'Emma', NULL, 'Wilson', '5550106', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 4, 4, 0, 8, '2025-06-15 00:44:11', '2025-06-15 00:44:11', '2025-07-16 18:49:16', NULL, NULL, NULL, 5);
 
 -- --------------------------------------------------------
 
@@ -355,14 +381,6 @@ CREATE TABLE `lead_locks` (
   `expires_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
---
--- Dumping data for table `lead_locks`
---
-
-INSERT INTO `lead_locks` (`lead_id`, `user_id`, `locked_at`, `expires_at`) VALUES
-(198125, 5, '2025-06-13 07:52:27', '2025-06-13 13:57:27'),
-(198126, 5, '2025-06-13 10:33:43', '2025-06-13 16:38:43');
-
 -- --------------------------------------------------------
 
 --
@@ -387,33 +405,6 @@ INSERT INTO `lead_sources` (`id`, `name`, `description`, `active`, `created_at`)
 (3, 'Referral', 'Recomendación', 1, '2025-05-14 18:06:03'),
 (4, 'Purchased Leads', 'Paquete de leads comprados', 1, '2025-05-15 13:21:45'),
 (5, 'Sample Source', 'Used for testing', 1, '2025-06-13 16:28:26');
-
--- --------------------------------------------------------
-
---
--- Table structure for table `lead_statuses`
---
-
-CREATE TABLE `lead_statuses` (
-  `id` int(11) NOT NULL,
-  `name` varchar(50) NOT NULL,
-  `description` text DEFAULT NULL,
-  `order_index` int(11) NOT NULL DEFAULT 99,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
---
--- Dumping data for table `lead_statuses`
---
-
-INSERT INTO `lead_statuses` (`id`, `name`, `description`, `order_index`, `created_at`) VALUES
-(1, 'New', 'Newly added lead', 1, '2025-05-14 18:06:03'),
-(2, 'Contacted', 'Initial contact made', 2, '2025-05-14 18:06:03'),
-(3, 'Qualified', 'Lead shows interest and qualifies', 6, '2025-05-14 18:06:03'),
-(4, 'Closed', 'No further action needed', 7, '2025-05-14 18:06:03'),
-(5, 'Follow Up', 'Needs follow-up contact at a later time', 3, '2025-06-03 10:05:45'),
-(6, 'Pending', 'Awaiting response or additional information', 5, '2025-06-03 10:05:45'),
-(7, 'In Progress', 'Active work is being done on this lead', 4, '2025-06-03 10:05:45');
 
 -- --------------------------------------------------------
 
@@ -497,7 +488,9 @@ INSERT INTO `user_roles` (`user_id`, `role_id`) VALUES
 (6, 3),
 (7, 5),
 (8, 3),
-(9, 3);
+(9, 3),
+(12, 3),
+(13, 3);
 
 --
 -- Indexes for dumped tables
@@ -554,10 +547,10 @@ ALTER TABLE `leads`
   ADD UNIQUE KEY `uq_leads_external` (`external_id`),
   ADD KEY `fk_leads_interest` (`insurance_interest_id`),
   ADD KEY `fk_leads_source` (`source_id`),
-  ADD KEY `fk_leads_status` (`status_id`),
   ADD KEY `idx_leads_taken` (`taken_by`,`taken_at`),
   ADD KEY `idx_leads_phone` (`phone`),
-  ADD KEY `idx_leads_do_not_call` (`do_not_call`);
+  ADD KEY `idx_leads_do_not_call` (`do_not_call`),
+  ADD KEY `fk_leads_uploaded_by` (`uploaded_by`);
 
 --
 -- Indexes for table `lead_documents`
@@ -580,13 +573,6 @@ ALTER TABLE `lead_locks`
 ALTER TABLE `lead_sources`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uq_lead_sources_name` (`name`);
-
---
--- Indexes for table `lead_statuses`
---
-ALTER TABLE `lead_statuses`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uq_lead_statuses_name` (`name`);
 
 --
 -- Indexes for table `roles`
@@ -635,13 +621,13 @@ ALTER TABLE `insurance_interests`
 -- AUTO_INCREMENT for table `interactions`
 --
 ALTER TABLE `interactions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=103;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=125;
 
 --
 -- AUTO_INCREMENT for table `leads`
 --
 ALTER TABLE `leads`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=198201;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=198214;
 
 --
 -- AUTO_INCREMENT for table `lead_documents`
@@ -656,12 +642,6 @@ ALTER TABLE `lead_sources`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
--- AUTO_INCREMENT for table `lead_statuses`
---
-ALTER TABLE `lead_statuses`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
-
---
 -- AUTO_INCREMENT for table `roles`
 --
 ALTER TABLE `roles`
@@ -671,7 +651,7 @@ ALTER TABLE `roles`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=33;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=32;
 
 --
 -- Constraints for dumped tables
@@ -695,9 +675,9 @@ ALTER TABLE `interactions`
 -- Constraints for table `leads`
 --
 ALTER TABLE `leads`
+  ADD CONSTRAINT `fk_leads_uploaded_by` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `leads_ibfk_1` FOREIGN KEY (`insurance_interest_id`) REFERENCES `insurance_interests` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `leads_ibfk_2` FOREIGN KEY (`source_id`) REFERENCES `lead_sources` (`id`),
-  ADD CONSTRAINT `leads_ibfk_3` FOREIGN KEY (`status_id`) REFERENCES `lead_statuses` (`id`),
   ADD CONSTRAINT `leads_ibfk_4` FOREIGN KEY (`taken_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
 
 --

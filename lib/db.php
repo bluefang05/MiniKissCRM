@@ -2,6 +2,11 @@
 // /lib/db.php
 require_once __DIR__ . '/../config/config.php';
 
+/**
+ * Devuelve una única instancia de PDO conectada a la base de datos.
+ *
+ * @return PDO
+ */
 function getPDO(): PDO
 {
     static $pdo;

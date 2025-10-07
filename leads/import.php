@@ -5,20 +5,22 @@ require_once __DIR__ . '/../lib/Lead.php';
 require_once __DIR__ . '/../lib/AuditLog.php';
 require_once __DIR__ . '/../lib/db.php';
 
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  if (
-    empty($_POST['csrf_token'])
-    || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
-  ) {
-    http_response_code(403);
-    exit('Invalid CSRF token');
-  }
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (
+        empty($_POST['csrf_token']) ||
+        !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
+    ) {
+        http_response_code(403);
+        exit('Invalid CSRF token');
+    }
+}
 
 if (!Auth::check()) {
-    header('Location: /auth/login.php');
+    header('Location: ../auth/login.php');
     exit;
 }
 
@@ -68,13 +70,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $defaultInterestId = (int) $_POST['default_interest_id'];
 
-        // 3) Validate CSV upload
-        if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
-            throw new Exception('Error uploading CSV file.');
-        }
-        $tmpPath = $_FILES['file']['tmp_name'];
-        if (!is_uploaded_file($tmpPath)) {
-            throw new Exception('Temporary upload file is missing.');
+        // 3) Handle file upload (CSV or XLSX via JS)
+        if (!empty($_POST['csv_data'])) {
+            $csvData = $_POST['csv_data'];
+            $tmpPath = tempnam(sys_get_temp_dir(), 'xlsx_');
+            file_put_contents($tmpPath, $csvData);
+        } else {
+            if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+                throw new Exception('Error uploading file.');
+            }
+            $tmpPath = $_FILES['file']['tmp_name'];
+            if (!is_uploaded_file($tmpPath)) {
+                throw new Exception('Temporary upload file is missing.');
+            }
         }
 
         // 4) Open CSV and read header
@@ -96,7 +104,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $normalized = [];
         foreach ($header as $h) {
             $col = preg_replace('/[^a-z0-9_]+/', '_', strtolower(trim($h)));
-            // adjust only if your CSV headers differ; otherwise skip
             if ($col === 'address')         $col = 'address_line';
             if ($col === 'suite_apt')       $col = 'suite_apt';
             if ($col === 'delivery_po')     $col = 'delivery_point_bar_code';
@@ -127,7 +134,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // 8) Process each row
         while (($row = fgetcsv($fh)) !== false) {
-            // Skip empty rows
             if (!$row || count(array_filter($row, fn($v) => trim((string)$v) !== '')) === 0) {
                 continue;
             }
@@ -171,20 +177,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $data['external_id'] = $ext;
 
-            // Required lead fields
+            // Required fixed fields
             $data['source_id']   = $sourceId;
-            $data['status_id']   = 1;   // New
             $data['do_not_call'] = 0;
+            // --- NUEVO: quién subió el lead ---
+            $data['uploaded_by'] = $user['id'];
 
-            // Whitelist columns
+            // Whitelist columns (sin status_id)
             $allowed = [
-                'external_id', 'prefix', 'first_name', 'mi', 'last_name',
-                'phone', 'email', 'address_line', 'suite_apt', 'city',
-                'state', 'zip5', 'zip4', 'delivery_point_bar_code',
-                'carrier_route', 'fips_county_code', 'county_name',
-                'age', 'insurance_interest_id',
-                'language', 'income',
-                'source_id', 'status_id', 'do_not_call'
+                'external_id','prefix','first_name','mi','last_name',
+                'phone','email','address_line','suite_apt','city',
+                'state','zip5','zip4','delivery_point_bar_code',
+                'carrier_route','fips_county_code','county_name',
+                'age','insurance_interest_id',
+                'language','income',
+                'source_id','do_not_call',
+                'uploaded_by'
             ];
             $data = array_intersect_key($data, array_flip($allowed));
 
@@ -201,6 +209,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         fclose($fh);
+        if (!empty($_POST['csv_data'])) {
+            unlink($tmpPath);
+        }
         $pdo->commit();
 
         // 9) Audit
@@ -209,7 +220,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'import_leads',
             sprintf(
                 'file=%s src=%d default_interest=%d created=%d updated=%d skipped=%d',
-                $_FILES['file']['name'],
+                !empty($_POST['csv_data']) ? 'excel_import' : $_FILES['file']['name'],
                 $sourceId,
                 $defaultInterestId,
                 $created,
@@ -233,7 +244,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
   <meta charset="utf-8">
   <title>Import Leads</title>
-  <link rel="stylesheet" href="./../assets/css/app.css">
+  <link rel="stylesheet" href="./../assets/css/leads/import.css">
+  <!-- SheetJS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- Spreadsheet Importer -->
+  <script src="../assets/js/spreadsheet-importer.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      SpreadsheetImporter.init({
+        formId: 'importForm',
+        inputId: 'file',
+        textareaId: 'csv_data'
+      });
+    });
+  </script>
 </head>
 <body>
 
@@ -255,8 +279,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </div>
     <?php endif; ?>
 
-    <form method="post" enctype="multipart/form-data" class="mb-4">
-    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+    <form id="importForm" method="post" enctype="multipart/form-data" class="mb-4">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+      <textarea id="csv_data" name="csv_data" style="display:none;"></textarea>
 
       <div class="form-group">
         <label for="source_id">Lead Source</label>
@@ -285,8 +310,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </div>
 
       <div class="form-group">
-        <label for="file">CSV File</label>
-        <input type="file" id="file" name="file" accept=".csv" class="form-control" required>
+        <label for="file">File</label>
+        <input type="file" id="file" name="file" accept=".csv,.xls,.xlsx" class="form-control" required>
+        <small class="text-muted">Supported formats: .csv, .xls, .xlsx</small>
       </div>
 
       <button type="submit" class="btn">Import Leads</button>

@@ -3,7 +3,10 @@
 require_once __DIR__ . '/../lib/Auth.php';
 require_once __DIR__ . '/../lib/db.php';
 
-session_start();
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
+
 if (!Auth::check() || !in_array('admin', Auth::user()['roles'] ?? [])) {
     die('<div class="container"><h1>Access Denied</h1></div>');
 }
@@ -42,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 <head>
   <meta charset="UTF-8">
   <title>Rename Document #<?= $id ?></title>
-  <link rel="stylesheet" href="../assets/css/app.css">
+  <link rel="stylesheet" href="../assets/css/admin/document_edit.css">
 </head>
 <body>
   <div class="container">

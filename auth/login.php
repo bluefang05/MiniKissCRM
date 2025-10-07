@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
   <meta charset="UTF-8">
   <title>Iniciar Sesión</title>
-  <link rel="stylesheet" href="./../assets/css/app.css">
+  <link rel="stylesheet" href="./../assets/css/auth/login.css">
 </head>
 <body>
 

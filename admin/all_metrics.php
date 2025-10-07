@@ -1,599 +1,393 @@
 <?php
 /**
- * dashboard.php
- *
- * Admin dashboard showing performance metrics for all users.
- * Allows filtering by user.
- *
- * Features:
- * - Switch between users
- * - Calls Today
- * - Avg Call Duration
- * - Conversion Rate
- * - Total Talk Time
- * - Disposition breakdown (doughnut chart)
- * - Daily/hourly trends (line/bar charts)
- * - Export to Excel/CSV
- *
- * @package MiniKissCRM
- * @author  Enmanuel Domínguez
+ * admin/all_metrics.php – Extended version
+ * Team-wide / per-agent KPI dashboard (admins/owners)
  */
-require_once __DIR__.'./../lib/Auth.php';
-require_once __DIR__.'./../lib/db.php';
+require_once __DIR__ . '/../lib/Auth.php';
+require_once __DIR__ . '/../lib/db.php';
 
-// Authentication check
-if (!Auth::check()) {
-    header('Location: ./../auth/login.php');
-    exit;
-}
+if (!Auth::check()) { header('Location: ../auth/login.php'); exit; }
 
-$user = Auth::user();
+$user  = Auth::user();
 $roles = $user['roles'] ?? [];
-
-// Authorization check – only allow admin
-if (!in_array('admin', $roles)) {
-    header('Location: ./../leads/list.php');
-    exit;
+if (!in_array('admin', $roles, true) && !in_array('owner', $roles, true)) {
+    header('Location: ../index.php'); exit;
 }
 
-/* ------------------------------------------------------------------ */
-/* Tiny JSON API for Ajax requests                                   */
-/* ------------------------------------------------------------------ */
+/* 1) Helper: sales agents */
+function getSalesAgents(PDO $pdo): array {
+    $sql = "
+        SELECT u.id, u.name
+        FROM users u
+        JOIN user_roles ur ON ur.user_id = u.id
+        JOIN roles r       ON r.id  = ur.role_id
+        WHERE r.name = 'sales'
+        ORDER BY u.name
+    ";
+    return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/* 2) JSON API */
 if (isset($_GET['api'])) {
     header('Content-Type: application/json; charset=utf-8');
-    $response = ['error' => null, 'data' => []];
+    $res = ['error'=>null,'data'=>[]];
+
     try {
         $pdo = getPDO();
+        $salesUsers = getSalesAgents($pdo);
+        $salesIds   = array_map('intval', array_column($salesUsers, 'id'));
 
-        // Get user_id from query param
-        $user_id = !empty($_GET['user']) ? (int)$_GET['user'] : null;
+        if (empty($salesIds)) {
+            $res['data'] = [
+                'totals' => ['calls_tot'=>0,'avg_duration'=>0,'total_talk_time'=>0,'conv_rate'=>0],
+                'users'=>[],
+                'dispositions'=>[],
+                'trend_day'=>[],
+                'trend_hour'=>array_fill_keys(array_map(fn($h)=>str_pad((string)$h,2,'0',STR_PAD_LEFT), range(0,23)), 0),
+                'latest_calls'=>[],
+                'sales_agents'=>$salesUsers,
+            ];
+            echo json_encode($res); exit;
+        }
 
-        // Date filter
-        $condition = '';
+        $rangeOpt = $_GET['range']   ?? 'week';   // week|month|year|all
+        $agentOpt = $_GET['user_id'] ?? 'all';    // numeric | all
+        $agentId  = ctype_digit((string)$agentOpt) ? (int)$agentOpt : 'all';
+        if ($agentId !== 'all' && !in_array($agentId, $salesIds, true)) {
+            throw new RuntimeException('Invalid agent id');
+        }
+
+        switch ($rangeOpt) {
+            case 'week':
+                $dateSql = "i.created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+                break;
+            case 'month':
+                $dateSql = "i.created_at >= DATE_FORMAT(CURDATE(),'%Y-%m-01')";
+                break;
+            case 'year':
+                $dateSql = "i.created_at >= DATE_FORMAT(CURDATE(),'%Y-01-01')";
+                break;
+            case 'all':
+            default:
+                $dateSql = "1";
+        }
+
         $bind = [];
-        if (!empty($_GET['from']) && !empty($_GET['to'])) {
-            $from = date('Y-m-d', strtotime($_GET['from']));
-            $to   = date('Y-m-d', strtotime($_GET['to']));
-            $condition = "i.created_at BETWEEN :from AND :to";
-            $bind = [':from' => "$from 00:00:00", ':to' => "$to 23:59:59"];
+        if ($agentId === 'all') {
+            $userSql = 'i.user_id IN (' . implode(',', $salesIds) . ')';
         } else {
-            $range = (int) ($_GET['range'] ?? 7);
-            $range = in_array($range, [1, 7, 30], true) ? $range : 7;
-            $condition = "i.created_at >= DATE_SUB(CURDATE(), INTERVAL $range DAY)";
+            $userSql = 'i.user_id = :uid';
+            $bind[':uid'] = $agentId;
         }
+        $baseWhere = "WHERE $dateSql AND $userSql";
 
-        // Base WHERE clause
-        $baseWhere = "WHERE ";
-        if ($user_id) {
-            $baseWhere .= "i.user_id = :user_id AND ";
-        }
-        $baseWhere .= $condition;
-
-        // KPI Query
-        $sql = "
-            SELECT 
-                COUNT(DISTINCT CASE WHEN DATE(i.created_at)=CURDATE() THEN i.id END) AS calls_today,
-                IFNULL(AVG(i.duration_seconds),0) AS avg_duration,
-                COUNT(CASE WHEN d.name='Interested' THEN 1 END) AS calls_conv,
-                COUNT(i.id) AS calls_tot,
-                SUM(i.duration_seconds) AS total_talk_time
+        // KPIs
+        $kpiStmt = $pdo->prepare("
+            SELECT
+              COUNT(*)                                         AS calls_tot,
+              IFNULL(AVG(i.duration_seconds),0)                AS avg_duration,
+              SUM(IFNULL(i.duration_seconds),0)                AS total_talk_time,
+              SUM(CASE WHEN d.name = 'Interested' THEN 1 END)  AS calls_conv
             FROM interactions i
             JOIN dispositions d ON d.id = i.disposition_id
             $baseWhere
-        ";
-        $stmt = $pdo->prepare($sql);
-        $params = $user_id ? [':user_id' => $user_id] : [];
-        $params = array_merge($params, $bind);
-        $stmt->execute($params);
-        $kpi = $stmt->fetch(PDO::FETCH_ASSOC);
+        ");
+        $kpiStmt->execute($bind);
+        $kpi = $kpiStmt->fetch(PDO::FETCH_ASSOC) ?: ['calls_tot'=>0,'avg_duration'=>0,'total_talk_time'=>0,'calls_conv'=>0];
 
-        // Day-wise data
-        $daySql = "
-            SELECT DATE(i.created_at) AS d, COUNT(*) AS c 
+        // Calls per user
+        $userStmt = $pdo->prepare("
+            SELECT u.name,
+                   COUNT(*)                           AS count,
+                   IFNULL(AVG(i.duration_seconds),0) AS avg_duration
+            FROM interactions i
+            JOIN users u ON u.id = i.user_id
+            $baseWhere
+            GROUP BY u.id
+            ORDER BY count DESC
+        ");
+        $userStmt->execute($bind);
+        $usersData = $userStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Dispositions
+        $dispStmt = $pdo->prepare("
+            SELECT d.name, COUNT(*) AS cnt
+            FROM interactions i
+            JOIN dispositions d ON d.id = i.disposition_id
+            $baseWhere
+            GROUP BY d.id
+        ");
+        $dispStmt->execute($bind);
+        $dispositions = $dispStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+
+        // Daily trend
+        $dayStmt = $pdo->prepare("
+            SELECT DATE(i.created_at) d, COUNT(*) c
             FROM interactions i
             $baseWhere
-            GROUP BY d 
+            GROUP BY d
             ORDER BY d
-        ";
-        $dayStmt = $pdo->prepare($daySql);
-        $dayStmt->execute($params);
-        $dayData = $dayStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        ");
+        $dayStmt->execute($bind);
+        $trendDay = $dayStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
 
-        // Hour-wise data
-        $hourSql = "
-            SELECT HOUR(i.created_at) AS h, COUNT(*) AS c
+        // Hourly trend (00..23, con ceros)
+        $hourStmt = $pdo->prepare("
+            SELECT LPAD(HOUR(i.created_at),2,'0') h, COUNT(*) c
             FROM interactions i
             $baseWhere
             GROUP BY h
             ORDER BY h
-        ";
-        $hourStmt = $pdo->prepare($hourSql);
-        $hourStmt->execute($params);
-        $hourRows = $hourStmt->fetchAll(PDO::FETCH_KEY_PAIR);
-        $hourData = array_replace(array_fill(0, 24, 0), $hourRows); // Ensure all hours are present
-
-        // Conversion rate
-        $convRate = $kpi['calls_tot']
-            ? round($kpi['calls_conv'] / $kpi['calls_tot'] * 100, 2)
-            : 0;
-
-        // Disposition breakdown
-        $dispStmt = $pdo->prepare("
-            SELECT d.name, COUNT(*) AS cnt
-            FROM interactions i
-            JOIN dispositions d ON i.disposition_id = d.id
-            $baseWhere
-            GROUP BY d.name
         ");
-        $dispStmt->execute($params);
-        $dispositions = $dispStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        $hourStmt->execute($bind);
+        $hoursRaw = $hourStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+        $trendHour = [];
+        for ($h=0; $h<24; $h++) {
+            $k = str_pad((string)$h, 2, '0', STR_PAD_LEFT);
+            $trendHour[$k] = isset($hoursRaw[$k]) ? (int)$hoursRaw[$k] : 0;
+        }
 
-        // Latest calls table
-        $latestCallsStmt = $pdo->prepare("
-            SELECT i.created_at, CONCAT(l.first_name,' ',l.last_name) AS lead_name, 
-                   d.name AS disposition, i.duration_seconds, u.name AS agent
+        // Latest calls
+        $latestStmt = $pdo->prepare("
+            SELECT i.created_at,
+                   CONCAT(l.first_name,' ',l.last_name) AS lead_name,
+                   d.name  AS disposition,
+                   u.name  AS user_name,
+                   i.duration_seconds
             FROM interactions i
-            JOIN leads l ON l.id = i.lead_id
+            JOIN leads        l ON l.id = i.lead_id
             JOIN dispositions d ON d.id = i.disposition_id
-            JOIN users u ON u.id = i.user_id
+            JOIN users        u ON u.id = i.user_id
             $baseWhere
             ORDER BY i.created_at DESC
-            LIMIT 6
+            LIMIT 10
         ");
-        $latestCallsStmt->execute($params);
-        $latest_calls = $latestCallsStmt->fetchAll(PDO::FETCH_ASSOC);
+        $latestStmt->execute($bind);
+        $latestCalls = $latestStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-        // Build response
-        $response['data'] = [
-            'totals' => [
-                'today' => (int)$kpi['calls_today'],
-                'avg' => round((float)$kpi['avg_duration'], 1),
-                'talk_time' => (int)$kpi['total_talk_time'],
-                'rate' => $convRate,
+        $convRate = $kpi['calls_tot'] ? round($kpi['calls_conv'] / $kpi['calls_tot'] * 100, 2) : 0;
+
+        $res['data'] = [
+            'totals'        => [
+                'calls_tot'       => (int)$kpi['calls_tot'],
+                'avg_duration'    => (float)$kpi['avg_duration'],
+                'total_talk_time' => (int)$kpi['total_talk_time'],
+                'conv_rate'       => $convRate,
             ],
-            'day' => $dayData,
-            'hour' => $hourData,
-            'dispositions' => $dispositions,
-            'latest_calls' => $latest_calls
+            'users'         => $usersData,
+            'dispositions'  => $dispositions,
+            'trend_day'     => $trendDay,
+            'trend_hour'    => $trendHour,
+            'latest_calls'  => $latestCalls,
+            'sales_agents'  => $salesUsers,
         ];
-    } catch (PDOException $e) {
-        error_log('Database Error: ' . $e->getMessage());
-        $response['error'] = 'Database Error: ' . $e->getMessage();
-    } catch (Exception $e) {
-        error_log('General Error: ' . $e->getMessage());
-        $response['error'] = 'General Error: ' . $e->getMessage();
+
+    } catch (Throwable $e) {
+        error_log('Metrics API: ' . $e->getMessage());
+        $res['error'] = 'Internal error';
     }
-    echo json_encode($response);
+
+    echo json_encode($res);
     exit;
 }
-/* ------------------------------------------------------------------ */
-/* Fetch latest calls statically (for initial HTML load)               */
-/* ------------------------------------------------------------------ */
+
+/* 3) HTML render */
 $pdo = getPDO();
-$stmt = $pdo->query("SELECT id, name FROM users ORDER BY name");
-$users = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+$salesAgents = getSalesAgents($pdo);
 ?>
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Team Dashboard – MiniKissCRM</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="./../assets/css/app.css">
-<style>
-.grid.cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-.card {
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    padding: 1.25rem;
-    text-align: center;
-}
-.card h3 {
-    margin-top: 0;
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #555;
-}
-.card p {
-    font-size: 1.75rem;
-    font-weight: 700;
-    margin: 0.5rem 0;
-}
-.card .subtext {
-    font-size: 0.85rem;
-    color: #777;
-}
-.controls {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-.range-box {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: center;
-}
-.range-box button.rng {
-    background: #f0f0f0;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 0.5rem 0.75rem;
-    cursor: pointer;
-    font-size: 0.85rem;
-}
-.range-box button.rng.active {
-    background: #4a86e8;
-    color: white;
-    border-color: #4a86e8;
-}
-.range-box input {
-    padding: 0.5rem;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    width: 120px;
-}
-.range-box button#applyCustom {
-    padding: 0.5rem 1rem;
-    background: #4a86e8;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-}
-.charts-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-}
-.chart-container {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    padding: 1.25rem;
-}
-.chart-container h3 {
-    margin-top: 0;
-    margin-bottom: 1rem;
-    font-size: 1.2rem;
-}
-.chart-container canvas {
-    width: 100% !important;
-    height: 300px !important;
-}
-.latest-calls-container {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-}
-.latest-calls-container h2 {
-    margin-top: 0;
-    margin-bottom: 1rem;
-    font-size: 1.3rem;
-}
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-table th, table td {
-    padding: 0.75rem;
-    text-align: left;
-    border-bottom: 1px solid #eee;
-}
-table th {
-    font-weight: 600;
-    color: #555;
-}
-table tr:hover td {
-    background-color: #f9f9f9;
-}
-.duration-cell {
-    font-family: monospace;
-}
-</style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script> 
-<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script> 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css"> 
+    <meta charset="UTF-8" />
+    <title>Team Metrics – MiniKissCRM</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="../assets/css/admin/all_metrics.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-<div class="container">
-  <div style="display:flex; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
-    <a href="./../leads/list.php" class="btn">← Leads</a>
-    <select id="userSelect" style="margin-left:auto; padding:.45rem .7rem; font-size:.9rem;">
-      <option value="">All Users</option>
-      <?php foreach ($users as $id => $name): ?>
-        <option value="<?= $id ?>"><?= htmlspecialchars($name) ?></option>
-      <?php endforeach ?>
-    </select>
-  </div>
-  <h1>Team Performance Dashboard</h1>
+<div class="page-container">
 
-  <!-- Summary Cards -->
-  <div class="grid cards">
-    <div class="card">
-      <h3 title="Number of calls made today.">Calls Today</h3>
-      <p id="cToday">…</p>
-      <div class="subtext">vs. yesterday</div>
+    <!-- Header con Back to Leads -->
+    <div class="header-bar">
+        <a href="../leads/list.php" class="btn-back" aria-label="Back to Leads">
+            <span class="btn-icon" aria-hidden="true">←</span>
+            Back to Leads
+        </a>
+        <h1 class="page-title">📊 Team Call Metrics</h1>
     </div>
-    <div class="card">
-      <h3 title="Average duration of completed calls.">Avg Call Duration</h3>
-      <p id="cAvgDur">…</p>
-      <div class="subtext">per call</div>
-    </div>
-    <div class="card">
-      <h3 title="Percentage of successful calls out of total interactions.">Conversion Rate</h3>
-      <p id="cRate">… %</p>
-      <div class="subtext">successful calls</div>
-    </div>
-    <div class="card">
-      <h3 title="Total time spent on calls.">Total Talk Time</h3>
-      <p id="cTalkTime">…</p>
-      <div class="subtext">this period</div>
-    </div>
-  </div>
 
-  <!-- Controls -->
-  <div class="controls">
-    <div class="range-box">
-      <button class="rng active" data-r="1">Today</button>
-      <button class="rng" data-r="7">This Week</button>
-      <button class="rng" data-r="30">This Month</button>
-      <button class="rng" data-r="7">7 Days</button>
-      <button class="rng" data-r="30">30 Days</button>
-      <div style="display:flex; align-items:center; gap:.5rem;">
-        <input id="pick-from" type="text" placeholder="From">
-        <span>→</span>
-        <input id="pick-to" type="text" placeholder="To">
-        <button id="applyCustom">Apply</button>
-      </div>
-    </div>
-    <div class="export-buttons">
-      <button id="exportBtn">Export Data</button>
-    </div>
-  </div>
+    <!-- Filtros -->
+    <div class="filters">
+        <select id="range-select" class="select">
+            <option value="week">This Week</option>
+            <option value="month" selected>This Month</option>
+            <option value="year">This Year</option>
+            <option value="all">All Time</option>
+        </select>
 
-  <!-- Charts Grid -->
-  <div class="charts-grid">
-    <div class="chart-container">
-      <h3>Calls by Day</h3>
-      <canvas id="cDay"></canvas>
-    </div>
-    <div class="chart-container">
-      <h3>Calls by Hour</h3>
-      <canvas id="cHour"></canvas>
-    </div>
-    <div class="chart-container">
-      <h3>Disposition Breakdown</h3>
-      <canvas id="cDisposition"></canvas>
-    </div>
-  </div>
+        <select id="user-select" class="select">
+            <option value="all">All Sales Agents</option>
+            <?php foreach ($salesAgents as $a): ?>
+                <option value="<?= (int)$a['id'] ?>"><?= htmlspecialchars($a['name']) ?></option>
+            <?php endforeach; ?>
+        </select>
 
-  <!-- Latest Calls Table -->
-  <div class="latest-calls-container">
-    <h2>Latest Calls</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Lead</th>
-          <th>Agent</th>
-          <th>Disposition</th>
-          <th>Duration</th>
-        </tr>
-      </thead>
-      <tbody id="latest-calls">
-        <tr>
-          <td colspan="5" style="text-align:center; padding: 2rem;">Loading call data...</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+        <button class="btn" onclick="fetchData()">↻ Refresh</button>
+    </div>
 
-<!-- JavaScript -->
+    <!-- KPI Cards -->
+    <div class="stats-grid">
+        <div class="stat-card"><h3>Total Calls</h3><p id="cTotal">0</p></div>
+        <div class="stat-card"><h3>Avg Duration</h3><p id="cAvgDur">0s</p></div>
+        <div class="stat-card"><h3>Total Talk Time</h3><p id="cTalkTime">0s</p></div>
+        <div class="stat-card"><h3>Conversion Rate</h3><p id="cConvRate">0%</p></div>
+    </div>
+
+    <!-- Calls per Agent -->
+    <section class="metric-section">
+        <h2>Calls per Agent</h2>
+        <table class="data-table">
+            <thead><tr><th>User</th><th>Calls</th><th>Avg Duration</th></tr></thead>
+            <tbody id="userTableBody"></tbody>
+        </table>
+    </section>
+
+    <!-- Dispositions -->
+    <section class="metric-section">
+        <h2>Disposition Distribution</h2>
+        <canvas id="chart-dispositions"></canvas>
+    </section>
+
+    <!-- Trends -->
+    <section class="metric-section">
+        <h2>Daily & Hourly Call Trends</h2>
+        <div class="charts-wrap">
+            <canvas id="chart-day-trend"></canvas>
+            <canvas id="chart-hour-trend"></canvas>
+        </div>
+    </section>
+
+    <!-- Latest Calls -->
+    <section class="metric-section">
+        <h2>Latest Calls</h2>
+        <table class="data-table">
+            <thead>
+                <tr><th>Agent</th><th>Lead</th><th>Disposition</th><th>Duration</th><th>Time</th></tr>
+            </thead>
+            <tbody id="latestCallTableBody"></tbody>
+        </table>
+    </section>
+
+</div><!-- /.page-container -->
+
 <script>
-const Num = x => Intl.NumberFormat().format(x);
-function formatDuration(seconds) {
-    if (!seconds) return '–';
-    if (seconds < 60) return `${seconds} sec`;
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m} min ${s > 0 ? `${s} sec` : ''}`.trim();
+let dispChart, dayChart, hourChart;
+
+// Helpers
+const durFmt = s => { s = Math.round(s); return `${Math.floor(s/60)}m ${s%60}s`; };
+const makeChart = (ctx, cfg) => new Chart(ctx, cfg);
+const esc = (s='') => String(s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+function fillTable(tbody, rowsHtml) {
+  tbody.innerHTML = '';
+  tbody.insertAdjacentHTML('beforeend', rowsHtml);
 }
-let range = '1', autoRefresh = true;
 
-// Initialize Charts
-const cDay = new Chart(document.getElementById('cDay'), {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [{
-            label: 'Calls',
-            data: [],
-            borderColor: '#4a86e8',
-            backgroundColor: 'rgba(74, 134, 232, 0.1)',
-            tension: 0.3,
-            fill: true
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-            y: { beginAtZero: true }
-        }
-    }
-});
+function updateCharts(data) {
+  [dispChart, dayChart, hourChart].filter(Boolean).forEach(c => c.destroy());
 
-const cHour = new Chart(document.getElementById('cHour'), {
-    type: 'bar',
-    data: {
-        labels: Array.from({length: 24}, (_, i) => `${i}:00`),
-        datasets: [{
-            label: 'Calls',
-            data: Array(24).fill(0),
-            backgroundColor: '#4a86e8'
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-            y: { beginAtZero: true }
-        }
-    }
-});
-
-const cDisposition = new Chart(document.getElementById('cDisposition'), {
+  // Dispositions doughnut
+  dispChart = makeChart(document.getElementById('chart-dispositions'), {
     type: 'doughnut',
     data: {
-        labels: [],
-        datasets: [{
-            data: [],
-            backgroundColor: [
-                '#4a86e8', '#e69138', '#6aa84f', '#cc0000', 
-                '#674ea7', '#3d85c6', '#f6b26b', '#b6d7a8'
-            ]
-        }]
+      labels: Object.keys(data.dispositions),
+      datasets: [{ data: Object.values(data.dispositions), borderWidth: 0 }]
     },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { position: 'right' }
-        }
-    }
-});
+    options: { plugins: { legend: { position: 'right' } }, responsive: true }
+  });
 
-function fetchData(user_id = null) {
-    const url = new URL(window.location.pathname, window.location.origin);
-    url.searchParams.set('api', '1');
-    const from = document.getElementById('pick-from').value;
-    const to = document.getElementById('pick-to').value;
-    if (from && to) {
-        url.searchParams.set('from', from);
-        url.searchParams.set('to', to);
-    } else {
-        url.searchParams.set('range', range);
-    }
-    if (user_id !== null) {
-        url.searchParams.set('user', user_id);
-    }
-    
-    fetch(url)
-        .then(r => r.json())
-        .then(d => {
-            if (d.error) {
-                console.error('API Error:', d.error);
-                document.getElementById('cToday').textContent = 'Error!';
-            } else {
-                updateUI(d.data);
-            }
-        })
-        .catch(e => {
-            console.error('Fetch error:', e);
-            document.getElementById('cToday').textContent = 'Network Error!';
-        });
+  // Day trend line
+  dayChart = makeChart(document.getElementById('chart-day-trend'), {
+    type: 'line',
+    data: {
+      labels: Object.keys(data.trend_day),
+      datasets: [{
+        data: Object.values(data.trend_day),
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } }, responsive: true }
+  });
+
+  // Hour trend bar (00..23 en orden ya viene del API)
+  hourChart = makeChart(document.getElementById('chart-hour-trend'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(data.trend_hour),
+      datasets: [{ data: Object.values(data.trend_hour) }]
+    },
+    options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } }, responsive: true }
+  });
 }
 
-function updateUI(data) {
-    // Update summary cards
-    document.getElementById('cToday').textContent = Num(data.totals.today);
-    document.getElementById('cAvgDur').textContent = formatDuration(Math.round(data.totals.avg));
-    document.getElementById('cRate').textContent = data.totals.rate + '%';
-    document.getElementById('cTalkTime').textContent = formatDuration(Math.round(data.totals.talk_time));
+function fetchData() {
+  const range = document.getElementById('range-select').value;
+  const uid   = document.getElementById('user-select').value;
 
-    // Update charts
-    cDay.data.labels = Object.keys(data.day);
-    cDay.data.datasets[0].data = Object.values(data.day);
-    cDay.update();
-    
-    cHour.data.datasets[0].data = Object.values(data.hour);
-    cHour.update();
-    
-    cDisposition.data.labels = Object.keys(data.dispositions);
-    cDisposition.data.datasets[0].data = Object.values(data.dispositions);
-    cDisposition.update();
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.searchParams.set('api','1');
+  url.searchParams.set('range', range);
+  url.searchParams.set('user_id', uid);
 
-    // Latest calls table
-    const tbody = document.getElementById('latest-calls');
-    tbody.innerHTML = '';
-    if (!data.latest_calls || data.latest_calls.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="5" style="text-align:center; padding: 2rem;">
-                    No calls found in the selected period
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    data.latest_calls.forEach(row => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${new Date(row.created_at).toLocaleString()}</td>
-            <td>${row.lead_name || 'Unknown'}</td>
-            <td>${row.agent || 'Unknown'}</td>
-            <td>${row.disposition || 'Unknown'}</td>
-            <td class="duration-cell">${row.duration_seconds ? formatDuration(row.duration_seconds) : '–'}</td>
-        `;
-        tbody.appendChild(tr);
-    });
+  fetch(url)
+    .then(r => r.json())
+    .then(j => {
+      if (j.error) { console.error(j.error); return; }
+      const d = j.data;
+
+      // KPI cards
+      document.getElementById('cTotal').textContent   = d.totals.calls_tot;
+      document.getElementById('cAvgDur').textContent  = durFmt(d.totals.avg_duration);
+      document.getElementById('cTalkTime').textContent= durFmt(d.totals.total_talk_time);
+      document.getElementById('cConvRate').textContent= d.totals.conv_rate + '%';
+
+      // Calls per user
+      fillTable(
+        document.getElementById('userTableBody'),
+        d.users.map(r => `
+          <tr>
+            <td>${esc(r.name)}</td>
+            <td>${r.count}</td>
+            <td>${esc(durFmt(r.avg_duration))}</td>
+          </tr>
+        `).join('')
+      );
+
+      // Latest calls
+      fillTable(
+        document.getElementById('latestCallTableBody'),
+        d.latest_calls.map(c => `
+          <tr>
+            <td>${esc(c.user_name)}</td>
+            <td>${esc(c.lead_name)}</td>
+            <td>${esc(c.disposition)}</td>
+            <td>${esc(durFmt(c.duration_seconds))}</td>
+            <td>${esc(new Date(c.created_at).toLocaleString())}</td>
+          </tr>
+        `).join('')
+      );
+
+      // Charts
+      updateCharts(d);
+    })
+    .catch(err => console.error('Fetch error:', err));
 }
 
-// Range buttons
-document.querySelectorAll('.rng').forEach(btn => {
-    btn.onclick = () => {
-        document.querySelectorAll('.rng').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        range = btn.dataset.r;
-        document.getElementById('pick-from').value = '';
-        document.getElementById('pick-to').value = '';
-        fetchData(document.getElementById('userSelect').value);
-    };
-});
-
-// Date pickers
-flatpickr("#pick-from", { dateFormat: "Y-m-d", altInput: true, altFormat: "M j, Y", allowInput: true });
-flatpickr("#pick-to", { dateFormat: "Y-m-d", altInput: true, altFormat: "M j, Y", allowInput: true });
-document.getElementById('applyCustom').onclick = () => {
-    document.querySelectorAll('.rng').forEach(b => b.classList.remove('active'));
-    range = 'custom';
-    fetchData(document.getElementById('userSelect').value);
-};
-
-// User selection
-document.getElementById('userSelect').onchange = () => {
-    fetchData(document.getElementById('userSelect').value);
-};
-
-// Export button
-document.getElementById('exportBtn').onclick = () => {
-    const user = document.getElementById('userSelect').value;
-    const from = document.getElementById('pick-from').value;
-    const to = document.getElementById('pick-to').value;
-    const url = `export.php?agent=${user}&range=${range}&from=${from}&to=${to}`;
-    window.location.href = url;
-};
-
-// Initial load
-fetchData();
-setInterval(() => {
-    if (autoRefresh) fetchData(document.getElementById('userSelect').value);
-}, 15000);
+window.addEventListener('load', fetchData);
 </script>
 </body>
 </html>

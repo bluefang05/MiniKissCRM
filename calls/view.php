@@ -32,7 +32,7 @@ $calls = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <head>
     <meta charset="UTF-8">
     <title>Llamadas para Lead #<?= $leadId ?></title>
-    <link rel="stylesheet" href="/assets/css/app.css">
+    <link rel="stylesheet" href="./../assets/css/calls/calls.css">
 </head>
 <body>
 <div class="container">

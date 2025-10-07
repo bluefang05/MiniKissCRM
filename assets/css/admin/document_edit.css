@@ -1,0 +1,197 @@
+/* 1. Color Palette & Variables */
+:root {
+  --c-bg: #ffffff;
+  --c-surface: #f4f6f8;
+  --c-fg: #333333;
+  --c-sub: #6c757d;
+  --c-border: #d1d5db;
+  --c-brand: #2c5d4a;
+  --c-accent: #007bff;
+  --c-error: #dc3545;
+  --radius: 8px;
+  --spacing: 1rem;
+  --font-base: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* 2. Global Resets */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-base);
+  background: var(--c-surface);
+  color: var(--c-fg);
+}
+
+/* 3. Container */
+.container {
+  max-width: 480px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+/* 4. Headings */
+.container > h1 {
+  margin-bottom: var(--spacing);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--c-brand);
+}
+
+/* 5. Error Message */
+.error {
+  padding: 0.75rem 1rem;
+  background: rgba(220,53,69,0.1);
+  border: 1px solid var(--c-error);
+  border-radius: var(--radius);
+  color: var(--c-error);
+  margin-bottom: var(--spacing);
+  font-size: 0.95rem;
+}
+
+/* 6. Form Card */
+form {
+  background: var(--c-bg);
+  padding: calc(var(--spacing) * 1.5);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* 7. Form Groups */
+.form-group {
+  margin-bottom: var(--spacing);
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: var(--c-fg);
+}
+
+.form-group input[type="text"] {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.95rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-bg);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input[type="text"]:focus {
+  outline: none;
+  border-color: var(--c-brand);
+  box-shadow: 0 0 0 3px rgba(44,93,74,0.1);
+}
+
+/* 8. Buttons - Base Style */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  text-decoration: none;
+  color: #fff;
+  background: var(--c-accent);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Primary Button Hover/Active */
+.btn:hover {
+  background: #0069d9;
+  transform: translateY(-1px);
+}
+
+.btn:focus,
+.btn:active {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.5);
+}
+
+/* Secondary Button */
+.btn-secondary {
+  background: var(--c-sub);
+  color: #fff;
+}
+
+.btn-secondary:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+}
+
+/* Danger Button */
+.btn-danger {
+  background: var(--c-error);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #c82333;
+  transform: translateY(-1px);
+}
+
+/* Small Buttons (used in tables) */
+.btn-sm {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+/* Outline Buttons (for visibility in tables) */
+.btn-outline-secondary {
+  background: transparent;
+  color: var(--c-sub);
+  border: 2px solid currentColor;
+}
+
+.btn-outline-secondary:hover {
+  background: var(--c-sub);
+  color: #fff;
+}
+
+.btn-outline-secondary:focus,
+.btn-outline-secondary:active {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(108, 117, 125, 0.5);
+}
+
+/* Icon inside buttons */
+.btn i {
+  font-size: 0.9rem;
+}
+
+/* 9. Form Actions Layout */
+form > .form-group:last-of-type {
+  margin-bottom: calc(var(--spacing) * 2);
+}
+
+form > button,
+form > a.btn-secondary {
+  margin-right: var(--spacing);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 480px) {
+  .container {
+    padding: 0 0.5rem;
+  }
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  form > button,
+  form > a.btn-secondary {
+    display: block;
+    width: 100%;
+    margin: 0 0 var(--spacing) 0;
+  }
+}

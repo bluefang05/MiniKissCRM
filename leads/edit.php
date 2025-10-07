@@ -1,270 +1,453 @@
 <?php
-// calls/add.php
+// leads/edit.php
+// Edita los datos del lead + gestiona subida/listado de documentos
+declare(strict_types=1);
+
 require_once __DIR__ . '/../lib/Auth.php';
 require_once __DIR__ . '/../lib/db.php';
-require_once __DIR__ . '/../lib/LeadLock.php';
-require_once __DIR__ . '/../lib/Interaction.php';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (
-        empty($_POST['csrf_token']) ||
-        !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
-    ) {
-        http_response_code(403);
-        exit('Invalid CSRF token');
-    }
-}
 
 if (!Auth::check()) {
-    header('Location: /auth/login.php');
-    exit;
+  header('Location: /auth/login.php');
+  exit;
 }
 
 $user = Auth::user();
-$pdo = getPDO();
-$leadId = (int) ($_GET['lead_id'] ?? 0);
+$pdo  = getPDO();
 
-// Check if this lead is marked do_not_call
-$stmt = $pdo->prepare("SELECT do_not_call FROM leads WHERE id = ?");
+// -------- Helpers CSRF --------
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+function csrf_check(string $token): bool {
+  return isset($_SESSION['csrf_token']) && hash_equals((string)$_SESSION['csrf_token'], $token);
+}
+$csrf = (string)$_SESSION['csrf_token'];
+
+// -------- Helpers Archivos --------
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
+$ALLOWED_EXT  = ['pdf','png','jpg','jpeg','docx','xlsx'];
+$ALLOWED_MIME = [
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+
+function uuidv4(): string {
+  $data = random_bytes(16);
+  $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
+  $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
+  return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+}
+
+// -------- ID lead --------
+$leadId = (int)($_GET['id'] ?? $_GET['lead_id'] ?? 0);
+if ($leadId <= 0) {
+  http_response_code(400);
+  exit('Lead inválido.');
+}
+
+// -------- Lookups para selects --------
+$sources      = $pdo->query("SELECT id, name FROM lead_sources WHERE active=1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+$interests    = $pdo->query("SELECT id, name FROM insurance_interests WHERE active=1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+$languages    = $pdo->query("SELECT code, description FROM language_codes ORDER BY description")->fetchAll(PDO::FETCH_ASSOC);
+$incomes      = $pdo->query("SELECT code, description FROM income_ranges ORDER BY description")->fetchAll(PDO::FETCH_ASSOC);
+
+// -------- Traer lead --------
+$stmt = $pdo->prepare("SELECT * FROM leads WHERE id = ?");
 $stmt->execute([$leadId]);
 $lead = $stmt->fetch(PDO::FETCH_ASSOC);
-$isDoNotCall = $lead && $lead['do_not_call'];
-
-// Attempt to acquire lock for call (5 minutes)
-if (!LeadLock::acquire($leadId, $user['id'], 5)) {
-    $expires = htmlspecialchars(LeadLock::check($leadId)['expires_at']);
-    echo <<<HTML
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Lead Locked</title>
-    <link rel="stylesheet" href="./../assets/css/app.css">
-    <style>.container {max-width: 600px; margin: 2rem auto;}</style>
-</head>
-<body>
-    <div class="container">
-        <h1><i class="fas fa-lock"></i> Lead Locked</h1>
-        <div class="alert">
-            This lead is currently being used by another user until {$expires}.
-        </div>
-        <p><a class="btn" href="list.php"><i class="fas fa-arrow-left"></i> Back to Leads</a></p>
-    </div>
-</body>
-</html>
-HTML;
-    exit;
+if (!$lead) {
+  http_response_code(404);
+  exit('Lead no encontrado.');
 }
+
+// -------- Saber si está locked por otro (para avisar) --------
+$lockStmt = $pdo->prepare("SELECT user_id, expires_at FROM lead_locks WHERE lead_id=? AND expires_at>=NOW()");
+$lockStmt->execute([$leadId]);
+$lock = $lockStmt->fetch(PDO::FETCH_ASSOC);
+$isLockedByOther = $lock && (int)$lock['user_id'] !== (int)$user['id'];
+$lockExpires     = $lock['expires_at'] ?? null;
+
+// -------- Manejo POST (dos acciones): guardar lead / subir doc --------
+$flash = null;       // mensajes del formulario de lead
+$uploadMessage = null; // mensajes del formulario de documentos
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Save interaction
-    Interaction::create([
-        'lead_id' => $_POST['lead_id'],
-        'user_id' => $user['id'],
-        'disposition_id' => $_POST['disposition_id'],
-        'notes' => $_POST['notes'] ?? null,
-        'duration_seconds' => $_POST['duration_seconds'] ?? null,
-    ]);
+  if (!csrf_check((string)($_POST['csrf_token'] ?? ''))) {
+    http_response_code(403);
+    exit('CSRF inválido');
+  }
 
-    // Check if the note indicates "Do Not Call"
-    $note = strtolower($_POST['notes'] ?? '');
-    $doNotCallKeywords = [
-        'removed from future calls',
-        'do not call again',
-        'no further contact',
-        'please stop calling'
-    ];
-    $isDoNotCall = false;
+  $action = (string)($_POST['__action'] ?? '');
 
-    foreach ($doNotCallKeywords as $keyword) {
-        if (stripos($note, $keyword) !== false) {
-            $isDoNotCall = true;
-            break;
+  // --- 1) Guardar datos del lead ---
+  if ($action === 'save_lead') {
+    // Campos editables (usa los que tienes en la tabla)
+    $prefix     = trim((string)($_POST['prefix'] ?? ''));
+    $first_name = trim((string)($_POST['first_name'] ?? ''));
+    $mi         = trim((string)($_POST['mi'] ?? ''));
+    $last_name  = trim((string)($_POST['last_name'] ?? ''));
+    $phone      = trim((string)($_POST['phone'] ?? ''));
+    $email      = trim((string)($_POST['email'] ?? ''));
+    $address    = trim((string)($_POST['address_line'] ?? ''));
+    $suite_apt  = trim((string)($_POST['suite_apt'] ?? ''));
+    $city       = trim((string)($_POST['city'] ?? ''));
+    $state      = strtoupper(trim((string)($_POST['state'] ?? '')));
+    $zip5       = trim((string)($_POST['zip5'] ?? ''));
+    $zip4       = trim((string)($_POST['zip4'] ?? ''));
+    $age        = $_POST['age'] !== '' ? (int)$_POST['age'] : null;
+
+    $interest_id = $_POST['insurance_interest_id'] !== '' ? (int)$_POST['insurance_interest_id'] : null;
+    $source_id   = $_POST['source_id'] !== '' ? (int)$_POST['source_id'] : $lead['source_id']; // conserva si no se manda
+    $income      = trim((string)($_POST['income'] ?? ''));
+    $language    = trim((string)($_POST['language'] ?? ''));
+    $notes       = trim((string)($_POST['notes'] ?? ''));
+    $do_not_call = isset($_POST['do_not_call']) ? 1 : 0;
+
+    // Validaciones simples
+    $errors = [];
+    if ($first_name === '' || $last_name === '') $errors[] = 'Nombre y apellido son requeridos.';
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Email inválido.';
+    if ($state !== '' && strlen($state) !== 2) $errors[] = 'State debe ser de 2 letras.';
+    if ($zip5 !== '' && strlen($zip5) !== 5) $errors[] = 'ZIP5 debe ser de 5 dígitos.';
+
+    if ($errors) {
+      $flash = ['type' => 'error', 'text' => implode(' ', $errors)];
+    } else {
+      $upd = $pdo->prepare("
+        UPDATE leads SET
+          prefix = ?, first_name = ?, mi = ?, last_name = ?, phone = ?, email = ?,
+          address_line = ?, suite_apt = ?, city = ?, state = ?, zip5 = ?, zip4 = ?,
+          age = ?, insurance_interest_id = ?, source_id = ?, income = ?, language = ?,
+          notes = ?, do_not_call = ?
+        WHERE id = ?
+      ");
+      $upd->execute([
+        $prefix !== '' ? $prefix : null,
+        $first_name,
+        $mi !== '' ? $mi : null,
+        $last_name,
+        $phone,
+        $email !== '' ? $email : null,
+        $address !== '' ? $address : null,
+        $suite_apt !== '' ? $suite_apt : null,
+        $city !== '' ? $city : null,
+        $state !== '' ? $state : null,
+        $zip5 !== '' ? $zip5 : null,
+        $zip4 !== '' ? $zip4 : null,
+        $age,
+        $interest_id,
+        $source_id,
+        $income !== '' ? $income : null,
+        $language !== '' ? $language : null,
+        $notes !== '' ? $notes : null,
+        $do_not_call,
+        $leadId
+      ]);
+
+      // Refrescar $lead
+      $stmt = $pdo->prepare("SELECT * FROM leads WHERE id = ?");
+      $stmt->execute([$leadId]);
+      $lead = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      $flash = ['type' => 'success', 'text' => 'Lead actualizado correctamente.'];
+    }
+  }
+
+  // --- 2) Subir documento ---
+  if ($action === 'upload_doc') {
+    $title = trim((string)($_POST['title'] ?? ''));
+    $file  = $_FILES['file'] ?? null;
+
+    if ($title === '' || mb_strlen($title) > 255) {
+      $uploadMessage = ['type' => 'error', 'text' => 'Título inválido.'];
+    } elseif (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+      $uploadMessage = ['type' => 'error', 'text' => 'Archivo faltante o con error.'];
+    } elseif ($file['size'] <= 0 || $file['size'] > MAX_FILE_BYTES) {
+      $uploadMessage = ['type' => 'error', 'text' => 'Archivo vacío o supera 10MB.'];
+    } else {
+      $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+      if (!in_array($ext, $ALLOWED_EXT, true)) {
+        $uploadMessage = ['type' => 'error', 'text' => 'Extensión no permitida.'];
+      } else {
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mime  = $finfo->file($file['tmp_name']) ?: 'application/octet-stream';
+        if (!in_array($mime, $ALLOWED_MIME, true)) {
+          $uploadMessage = ['type' => 'error', 'text' => 'Tipo de archivo no permitido.'];
+        } else {
+          $storedName = uuidv4() . '.' . $ext;
+          $storageDir = __DIR__ . '/../storage/lead_documents/';
+          if (!is_dir($storageDir) && !mkdir($storageDir, 0775, true) && !is_dir($storageDir)) {
+            $uploadMessage = ['type' => 'error', 'text' => 'No se pudo crear la carpeta de almacenamiento.'];
+          } else {
+            $destPath = $storageDir . $storedName;
+            if (!move_uploaded_file($file['tmp_name'], $destPath)) {
+              $uploadMessage = ['type' => 'error', 'text' => 'No se pudo guardar el archivo.'];
+            } else {
+              $ins = $pdo->prepare("
+                INSERT INTO lead_documents (lead_id, title, file_name, file_path, file_type, uploaded_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+              ");
+              $ins->execute([
+                $leadId,
+                mb_substr($title, 0, 255),
+                $storedName,
+                'storage/lead_documents/',
+                $mime,
+                (int)$user['id'],
+              ]);
+              $uploadMessage = ['type' => 'success', 'text' => 'Documento subido correctamente.'];
+            }
+          }
         }
+      }
     }
-
-    // Also check if disposition ID is "Do Not Call Requested"
-    if ($_POST['disposition_id'] == 4) {
-        $isDoNotCall = true;
-    }
-
-    // Update leads table if Do Not Call is requested
-    if ($isDoNotCall) {
-        $stmt = $pdo->prepare("UPDATE leads SET do_not_call = 1 WHERE id = ?");
-        $stmt->execute([$leadId]);
-    }
-
-    // Release lock after saving the call
-    LeadLock::release($leadId, $user['id']);
-
-    header('Location: list.php');
-    exit;
+  }
 }
 
-// Get lead's phone number
-$stmt = $pdo->prepare("SELECT phone FROM leads WHERE id = ?");
-$stmt->execute([$leadId]);
-$leadData = $stmt->fetch(PDO::FETCH_ASSOC);
-$phoneNumber = $leadData['phone'] ?? '';
-
-// Normalize to international format (+1...)
-$cleaned = preg_replace('/\D+/', '', $phoneNumber);
-if (strlen($cleaned) === 10) {
-    $internationalNumber = '+1' . $cleaned;
-} elseif (strlen($cleaned) === 11 && strpos($cleaned, '1') === 0) {
-    $internationalNumber = '+' . $cleaned;
-} else {
-    $internationalNumber = '+' . $cleaned;
-}
-
-// Load dispositions
-$dispositions = $pdo
-    ->query("SELECT id, name FROM dispositions ORDER BY name")
-    ->fetchAll(PDO::FETCH_ASSOC);
-
-// Load previous interactions
-$stmt = $pdo->prepare("
-    SELECT
-      i.created_at,
-      i.notes,
-      i.duration_seconds,
-      d.name AS disposition,
-      u.name AS user
-    FROM interactions i
-    JOIN dispositions d ON i.disposition_id = d.id
-    JOIN users u ON i.user_id = u.id
-    WHERE i.lead_id = :lead_id
-    ORDER BY i.created_at DESC
+// -------- Documentos del lead --------
+$docsStmt = $pdo->prepare("
+  SELECT id, title, file_name, file_type, uploaded_at
+  FROM lead_documents
+  WHERE lead_id = ?
+  ORDER BY uploaded_at DESC
 ");
-$stmt->execute(['lead_id' => $leadId]);
-$interactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$docsStmt->execute([$leadId]);
+$docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
+
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Register Call &mdash; Lead #<?= htmlspecialchars($leadId) ?></title>
-    <link rel="stylesheet" href="./../assets/css/app.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">  
+  <meta charset="UTF-8">
+  <title>Edit Lead #<?= htmlspecialchars((string)$leadId, ENT_QUOTES, 'UTF-8') ?></title>
+  <link rel="stylesheet" href="../assets/css/leads/edit.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+    .container{max-width:1000px;margin:24px auto;padding:0 16px;}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+    .card{border:1px solid #eee;border-radius:12px;padding:16px;background:#fff;}
+    .alert{padding:12px 16px;border-radius:8px;margin:10px 0;}
+    .alert-success{background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;}
+    .alert-error{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;}
+    .alert-warn{background:#fff3cd;color:#664d03;border:1px solid #ffe69c;}
+    .form-group{margin-bottom:12px;}
+    .form-control{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;}
+    label i{margin-right:6px;}
+    .btn{display:inline-block;padding:10px 14px;border-radius:10px;background:#0d6efd;color:#fff;text-decoration:none;border:0;cursor:pointer;}
+    .btn-secondary{background:#6c757d;}
+    .row{display:flex;gap:8px;}
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1><i class="fas fa-phone"></i> Register Call for Lead #<?= htmlspecialchars($leadId) ?></h1>
+  <div class="container">
+    <h1><i class="fas fa-user-edit"></i> Edit Lead #<?= htmlspecialchars((string)$leadId, ENT_QUOTES, 'UTF-8') ?></h1>
 
-        <?php if ($isDoNotCall): ?>
-            <div class="alert alert-danger">
-                ⚠️ This lead has opted out of future contact. Please respect their wishes unless you have explicit permission to proceed.
+    <?php if ($isLockedByOther): ?>
+      <div class="alert alert-warn">
+        <i class="fas fa-lock"></i> Este lead está siendo usado por otro usuario hasta
+        <strong><?= htmlspecialchars((string)$lockExpires, ENT_QUOTES, 'UTF-8') ?></strong>. Puedes revisar la información, pero **mejor evita guardar cambios** para no pisarlos.
+      </div>
+    <?php endif; ?>
+
+    <?php if ($flash): ?>
+      <div class="alert <?= $flash['type']==='success' ? 'alert-success' : 'alert-error' ?>">
+        <?= htmlspecialchars($flash['text'], ENT_QUOTES, 'UTF-8') ?>
+      </div>
+    <?php endif; ?>
+
+    <div class="grid">
+      <!-- Columna izquierda: Form de edición -->
+      <div class="card">
+        <h2><i class="fas fa-id-card"></i> Datos del Lead</h2>
+        <form method="post" autocomplete="off">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+          <input type="hidden" name="__action" value="save_lead">
+
+          <div class="row">
+            <div class="form-group" style="flex:1;">
+              <label for="prefix">Prefijo</label>
+              <input class="form-control" type="text" id="prefix" name="prefix" value="<?= htmlspecialchars((string)($lead['prefix'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             </div>
-        <?php endif; ?>
-
-        <?php if ($interactions): ?>
-            <div class="previous-calls">
-                <h2><i class="fas fa-history"></i> Call History</h2>
-                <ul class="call-history">
-                    <?php foreach ($interactions as $call): ?>
-                        <li>
-                            <div class="call-meta">
-                                <span><i class="fas fa-user"></i> <?= htmlspecialchars($call['user']) ?></span>
-                                <span><i class="fas fa-clock"></i> <?= htmlspecialchars($call['created_at']) ?></span>
-                            </div>
-                            <strong><?= htmlspecialchars($call['disposition']) ?></strong>
-                            <div style="margin-top:.5rem;">
-                                <?= nl2br(htmlspecialchars($call['notes'])) ?>
-                            </div>
-                            <?php if ($call['duration_seconds']): ?>
-                                <small>
-                                    <i class="fas fa-stopwatch"></i>
-                                    Duration:
-                                    <?= floor($call['duration_seconds'] / 60) ?>m
-                                    <?= $call['duration_seconds'] % 60 ?>s
-                                </small>
-                            <?php endif; ?>
-                        </li>
-                    <?php endforeach; ?>
-                </ul>
+            <div class="form-group" style="flex:2;">
+              <label for="first_name">Nombre *</label>
+              <input class="form-control" type="text" id="first_name" name="first_name" required value="<?= htmlspecialchars((string)$lead['first_name'], ENT_QUOTES, 'UTF-8') ?>">
             </div>
-        <?php else: ?>
-            <div class="alert">No previous calls recorded.</div>
-        <?php endif; ?>
-
-        <form method="post">
-            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-            <input type="hidden" name="lead_id" value="<?= htmlspecialchars($leadId) ?>">
-
-            <div class="form-group">
-                <label for="disposition_id"><i class="fas fa-check-circle"></i> Call Outcome</label>
-                <select id="disposition_id" name="disposition_id" class="form-control" required>
-                    <?php foreach ($dispositions as $d): ?>
-                        <option value="<?= $d['id'] ?>"><?= htmlspecialchars($d['name']) ?></option>
-                    <?php endforeach; ?>
-                </select>
+            <div class="form-group" style="flex:1;">
+              <label for="mi">MI</label>
+              <input class="form-control" type="text" id="mi" name="mi" value="<?= htmlspecialchars((string)($lead['mi'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             </div>
-
-            <div class="form-group">
-                <label for="note_template"><i class="fas fa-memo"></i> Quick Notes</label>
-                <select id="note_template" class="form-control" onchange="applyNoteTemplate()">
-                    <option value="">-- Select a quick note --</option>
-                    <!-- Health Insurance -->
-                    <optgroup label="🩺 Health Insurance">
-                        <option value="Lead was interested in health insurance options.">Interested</option>
-                        <option value="Lead not interested in health insurance at this time.">Not Interested</option>
-                        <option value="Sent over a quote for health coverage.">Asked for Quote</option>
-                        <option value="Assisted lead with enrollment process.">Needs Help Enrolling</option>
-                        <option value="Answered questions about deductible and out-of-pocket costs.">Coverage Questions</option>
-                    </optgroup>
-                    <!-- Life Insurance -->
-                    <optgroup label="🧬 Life Insurance">
-                        <option value="Lead expressed interest in term life insurance.">Interested</option>
-                        <option value="Lead is not considering life insurance right now.">Not Interested</option>
-                        <option value="Looking for coverage to protect family financially.">Family Protection Interest</option>
-                        <option value="Compared several policies and pricing options.">Policy Comparison</option>
-                    </optgroup>
-                    <!-- General Follow-Up -->
-                    <optgroup label="🔁 Follow-Up">
-                        <option value="Will follow up again next week.">Schedule Call Back</option>
-                        <option value="Left a voicemail explaining the benefits.">Left Voicemail</option>
-                        <option value="Lead was busy; asked to call back later.">Busy / Not Available</option>
-                        <option value="Lead requested to be removed from future calls.">Do Not Call Requested</option>
-                    </optgroup>
-                </select>
+            <div class="form-group" style="flex:2;">
+              <label for="last_name">Apellido *</label>
+              <input class="form-control" type="text" id="last_name" name="last_name" required value="<?= htmlspecialchars((string)$lead['last_name'], ENT_QUOTES, 'UTF-8') ?>">
             </div>
+          </div>
 
-            <div class="form-group">
-                <label for="duration_seconds"><i class="fas fa-stopwatch"></i> Duration (seconds)</label>
-                <input required type="number" id="duration_seconds" name="duration_seconds" class="form-control" placeholder="E.g.: 60">
+          <div class="row">
+            <div class="form-group" style="flex:2;">
+              <label for="phone"><i class="fas fa-phone"></i> Teléfono</label>
+              <input class="form-control" type="text" id="phone" name="phone" value="<?= htmlspecialchars((string)$lead['phone'], ENT_QUOTES, 'UTF-8') ?>">
             </div>
-
-            <div class="form-group">
-                <label for="notes"><i class="fas fa-sticky-note"></i> Additional Notes</label>
-                <textarea required id="notes" name="notes" rows="5" class="form-control" placeholder="Conversation details..."></textarea>
+            <div class="form-group" style="flex:3;">
+              <label for="email"><i class="fas fa-envelope"></i> Email</label>
+              <input class="form-control" type="email" id="email" name="email" value="<?= htmlspecialchars((string)($lead['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             </div>
+            <div class="form-group" style="flex:1;">
+              <label for="age"><i class="fas fa-user"></i> Edad</label>
+              <input class="form-control" type="number" id="age" name="age" value="<?= htmlspecialchars((string)($lead['age'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+            </div>
+          </div>
 
-            <?php if ($isDoNotCall): ?>
-                <button type="submit" class="btn btn-warning" onclick="return confirm('Are you sure you want to continue contacting this lead? They have requested not to be called again.')">
-                    <i class="fas fa-save"></i> Override and Save Call
-                </button>
-            <?php else: ?>
-                <button type="submit" class="btn"><i class="fas fa-save"></i> Save Call</button>
-            <?php endif; ?>
+          <div class="form-group">
+            <label for="address_line"><i class="fas fa-map-marker-alt"></i> Dirección</label>
+            <input class="form-control" type="text" id="address_line" name="address_line" value="<?= htmlspecialchars((string)($lead['address_line'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+          </div>
 
+          <div class="row">
+            <div class="form-group" style="flex:1;">
+              <label for="suite_apt">Apto/Suite</label>
+              <input class="form-control" type="text" id="suite_apt" name="suite_apt" value="<?= htmlspecialchars((string)($lead['suite_apt'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+            </div>
+            <div class="form-group" style="flex:2;">
+              <label for="city">Ciudad</label>
+              <input class="form-control" type="text" id="city" name="city" value="<?= htmlspecialchars((string)($lead['city'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label for="state">Estado (2)</label>
+              <input class="form-control" type="text" id="state" name="state" maxlength="2" value="<?= htmlspecialchars((string)($lead['state'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label for="zip5">ZIP5</label>
+              <input class="form-control" type="text" id="zip5" name="zip5" maxlength="5" value="<?= htmlspecialchars((string)($lead['zip5'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label for="zip4">ZIP4</label>
+              <input class="form-control" type="text" id="zip4" name="zip4" maxlength="4" value="<?= htmlspecialchars((string)($lead['zip4'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="form-group" style="flex:1;">
+              <label for="insurance_interest_id">Interés</label>
+              <select class="form-control" id="insurance_interest_id" name="insurance_interest_id">
+                <option value="">—</option>
+                <?php foreach ($interests as $i): ?>
+                  <option value="<?= (int)$i['id'] ?>" <?= ((int)($lead['insurance_interest_id'] ?? 0) === (int)$i['id']) ? 'selected' : '' ?>>
+                    <?= htmlspecialchars((string)$i['name'], ENT_QUOTES, 'UTF-8') ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label for="source_id">Fuente</label>
+              <select class="form-control" id="source_id" name="source_id">
+                <?php foreach ($sources as $s): ?>
+                  <option value="<?= (int)$s['id'] ?>" <?= ((int)$lead['source_id'] === (int)$s['id']) ? 'selected' : '' ?>>
+                    <?= htmlspecialchars((string)$s['name'], ENT_QUOTES, 'UTF-8') ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label for="income">Ingreso</label>
+              <select class="form-control" id="income" name="income">
+                <option value="">—</option>
+                <?php foreach ($incomes as $i): ?>
+                  <option value="<?= htmlspecialchars((string)$i['code'], ENT_QUOTES, 'UTF-8') ?>" <?= (($lead['income'] ?? '') === $i['code']) ? 'selected' : '' ?>>
+                    <?= htmlspecialchars((string)$i['description'], ENT_QUOTES, 'UTF-8') ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label for="language">Idioma</label>
+              <select class="form-control" id="language" name="language">
+                <option value="">—</option>
+                <?php foreach ($languages as $l): ?>
+                  <option value="<?= htmlspecialchars((string)$l['code'], ENT_QUOTES, 'UTF-8') ?>" <?= (($lead['language'] ?? '') === $l['code']) ? 'selected' : '' ?>>
+                    <?= htmlspecialchars((string)$l['description'], ENT_QUOTES, 'UTF-8') ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="notes"><i class="fas fa-sticky-note"></i> Notas</label>
+            <textarea class="form-control" id="notes" name="notes" rows="4"><?= htmlspecialchars((string)($lead['notes'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" name="do_not_call" value="1" <?= ((int)$lead['do_not_call'] === 1) ? 'checked' : '' ?>>
+              <strong>No llamar (DNC)</strong>
+            </label>
+          </div>
+
+          <button type="submit" class="btn" <?= $isLockedByOther ? 'disabled' : '' ?>>
+            <i class="fas fa-save"></i> Guardar cambios
+          </button>
+          <a class="btn btn-secondary" href="list.php"><i class="fas fa-arrow-left"></i> Volver</a>
         </form>
+      </div>
 
-        <p>
-            <a class="btn btn-secondary" href="list.php">
-                <i class="fas fa-arrow-left"></i> « Back to Leads
-            </a>
-        </p>
+      <!-- Columna derecha: Documentos -->
+      <div class="card">
+        <h2><i class="fas fa-paperclip"></i> Documentos del Lead</h2>
+
+        <?php if ($uploadMessage): ?>
+          <div class="alert <?= $uploadMessage['type']==='success' ? 'alert-success' : 'alert-error' ?>">
+            <?= htmlspecialchars($uploadMessage['text'], ENT_QUOTES, 'UTF-8') ?>
+          </div>
+        <?php endif; ?>
+
+        <?php if (!$docs): ?>
+          <p class="muted">No hay documentos aún.</p>
+        <?php else: ?>
+          <ul style="list-style:none;padding:0;margin:0;">
+            <?php foreach ($docs as $d): ?>
+              <li style="border:1px solid #f1f5f9;border-radius:8px;padding:10px;margin:8px 0;">
+                <strong><?= htmlspecialchars((string)$d['title'], ENT_QUOTES, 'UTF-8') ?></strong>
+                <div style="color:#6b7280;font-size:.9rem;">
+                  <?= htmlspecialchars((string)$d['file_type'], ENT_QUOTES, 'UTF-8') ?> —
+                  <?= htmlspecialchars((string)$d['uploaded_at'], ENT_QUOTES, 'UTF-8') ?>
+                </div>
+                <div style="margin-top:6px;">
+                  <a class="btn" href="/download.php?id=<?= (int)$d['id'] ?>"><i class="fa-solid fa-download"></i> Descargar</a>
+                </div>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        <?php endif; ?>
+
+        <hr style="margin:14px 0; border:none; border-top:1px solid #eee;">
+        <h3>Subir nuevo documento</h3>
+        <form method="post" enctype="multipart/form-data" autocomplete="off">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+          <input type="hidden" name="__action" value="upload_doc">
+
+          <div class="form-group">
+            <label for="title"><i class="fa-regular fa-rectangle-list"></i> Título</label>
+            <input class="form-control" type="text" id="title" name="title" maxlength="255" required>
+          </div>
+
+          <div class="form-group">
+            <label for="file"><i class="fa-regular fa-file"></i> Archivo</label>
+            <input class="form-control" type="file" id="file" name="file" required>
+            <small style="color:#6b7280;">Permitidos: PDF, PNG, JPG, DOCX, XLSX. Máx: 10MB.</small>
+          </div>
+
+          <button type="submit" class="btn"><i class="fa-solid fa-upload"></i> Subir</button>
+        </form>
+      </div>
     </div>
 
-    <script>
-        function applyNoteTemplate() {
-            const select = document.getElementById('note_template');
-            const textarea = document.getElementById('notes');
-            const selectedText = select.value;
-            if (selectedText) {
-                textarea.value += (textarea.value ? '\n' : '') + selectedText;
-            }
-        }
-    </script>
+    <p style="margin-top:14px;">
+      <a class="btn btn-secondary" href="list.php"><i class="fas fa-arrow-left"></i> Volver a la lista</a>
+    </p>
+  </div>
 </body>
 </html>

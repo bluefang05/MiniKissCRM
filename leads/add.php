@@ -5,34 +5,36 @@ require_once __DIR__ . '/../lib/Lead.php';
 require_once __DIR__ . '/../lib/AuditLog.php';
 require_once __DIR__ . '/../lib/db.php';
 
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  if (
-    empty($_POST['csrf_token'])
-    || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
-  ) {
-    http_response_code(403);
-    exit('Invalid CSRF token');
-  }
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (
+        empty($_POST['csrf_token'])
+        || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
+    ) {
+        http_response_code(403);
+        exit('Invalid CSRF token');
+    }
+}
 
 if (!Auth::check()) {
     header('Location: /auth/login.php');
     exit;
 }
 
-$user      = Auth::user();
-$pdo       = getPDO();
+$user = Auth::user();
+$pdo  = getPDO();
 
+// Sólo roles permitidos
 $allowedRoles = ['admin', 'lead_manager'];
-if (!Auth::check() || !array_intersect($allowedRoles, Auth::user()['roles'] ?? [])) {
+if (!array_intersect($allowedRoles, $user['roles'] ?? [])) {
     die('<div class="container"><h1>Acceso denegado</h1></div>');
 }
 
 // Cargar opciones del formulario
 $sources   = $pdo->query("SELECT id, name FROM lead_sources WHERE active=1 ORDER BY name")->fetchAll();
-$statuses  = $pdo->query("SELECT id, name FROM lead_statuses ORDER BY name")->fetchAll();
 $interests = $pdo->query("SELECT id, name FROM insurance_interests WHERE active=1 ORDER BY name")->fetchAll();
 $languages = $pdo->query("SELECT code, description FROM language_codes ORDER BY description")->fetchAll();
 $incomes   = $pdo->query("SELECT code, description FROM income_ranges ORDER BY description")->fetchAll();
@@ -41,8 +43,8 @@ $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        // Validar campos obligatorios
-        $requiredFields = ['first_name', 'last_name', 'phone', 'insurance_interest_id', 'source_id', 'status_id'];
+        // Validar campos obligatorios (sin status_id ahora)
+        $requiredFields = ['first_name', 'last_name', 'phone', 'insurance_interest_id', 'source_id'];
         foreach ($requiredFields as $field) {
             if (empty($_POST[$field])) {
                 throw new Exception("The field '{$field}' is required.");
@@ -68,10 +70,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'income'                => $_POST['income'] ?: null,
             'insurance_interest_id' => (int)$_POST['insurance_interest_id'],
             'source_id'             => (int)$_POST['source_id'],
-            'status_id'             => (int)$_POST['status_id'],
             'do_not_call'           => !empty($_POST['do_not_call']) ? 1 : 0,
             'taken_by'              => null,
             'taken_at'              => null,
+            // --- NUEVO: quién subió el lead ---
+            'uploaded_by'           => $user['id'],
         ];
 
         // Crear Lead
@@ -94,79 +97,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
   <meta charset="utf-8">
   <title>Add New Lead</title>
-  <link rel="stylesheet" href="./../assets/css/app.css">
+  <link rel="stylesheet" href="./../assets/css/leads/add.css">
   <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background-color: #f5f7fa;
-    }
-    .container {
-      max-width: 800px;
-      margin: 40px auto;
-      padding: 30px;
-      background-color: #fff;
-      border-radius: 10px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    }
-    h1, h2 {
-      color: #2c3e50;
-      margin-bottom: 15px;
-    }
-    .form-group {
-      margin-bottom: 20px;
-    }
-    label {
-      display: block;
-      font-weight: bold;
-      margin-bottom: 6px;
-    }
-    input[type="text"],
-    input[type="email"],
-    input[type="tel"],
-    select,
-    textarea {
-      width: 100%;
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      font-size: 1rem;
-    }
-    textarea {
-      resize: vertical;
-      min-height: 100px;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 20px;
-    }
-    .actions {
-      margin-top: 20px;
-    }
-    button.btn {
-      background-color: #007bff;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 1rem;
-    }
-    a.btn-secondary {
-      display: inline-block;
-      margin-left: 10px;
-      background-color: #6c757d;
-      color: white;
-      padding: 10px 20px;
-      text-decoration: none;
-      border-radius: 6px;
-    }
-    .error {
-      background-color: #ffe6e6;
-      color: #d90000;
-      padding: 10px;
-      border-left: 4px solid #d90000;
-      margin-bottom: 20px;
+    /* Limitar el ancho de los selects para que no ocupen todo el ancho */
+    select {
+      width: auto;
+      min-width: 200px;
+      max-width: 100%;
     }
   </style>
 </head>
@@ -176,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <h1>Add New Lead</h1>
 
   <?php if ($error): ?>
-    <div class="error"><?= htmlspecialchars($error) ?></div>
+    <div class="error"><?= nl2br(htmlspecialchars($error)) ?></div>
   <?php endif; ?>
 
   <form method="post">
@@ -252,17 +189,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </select>
       </div>
       <div class="form-group">
-        <label for="status_id">Status *</label>
-        <select id="status_id" name="status_id" required>
-          <option value="">Select Status</option>
-          <?php foreach ($statuses as $status): ?>
-            <option value="<?= $status['id'] ?>" <?= (isset($_POST['status_id']) && $_POST['status_id'] == $status['id']) ? 'selected' : '' ?>>
-              <?= htmlspecialchars($status['name']) ?>
-            </option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <div class="form-group">
         <label for="insurance_interest_id">Insurance Interest *</label>
         <select id="insurance_interest_id" name="insurance_interest_id" required>
           <option value="">Select Interest</option>
@@ -276,6 +202,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <div class="form-group">
         <label for="external_id">External ID</label>
         <input type="text" id="external_id" name="external_id" value="<?= htmlspecialchars($_POST['external_id'] ?? '') ?>">
+      </div>
+      <div class="form-group">
+        <label for="language">Language</label>
+        <select id="language" name="language">
+          <option value="">Select Language</option>
+          <?php foreach ($languages as $lang): ?>
+            <option value="<?= $lang['code'] ?>" <?= (isset($_POST['language']) && $_POST['language'] == $lang['code']) ? 'selected' : '' ?>>
+              <?= htmlspecialchars($lang['description']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="income">Income Range</label>
+        <select id="income" name="income">
+          <option value="">Select Income</option>
+          <?php foreach ($incomes as $inc): ?>
+            <option value="<?= $inc['code'] ?>" <?= (isset($_POST['income']) && $_POST['income'] == $inc['code']) ? 'selected' : '' ?>>
+              <?= htmlspecialchars($inc['description']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
       </div>
     </div>
 
@@ -294,7 +242,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <button type="submit" class="btn">Save Lead</button>
       <a href="list.php" class="btn-secondary">Back to List</a>
     </div>
-  </div>
+</div>
 
 </body>
 </html>

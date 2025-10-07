@@ -1,0 +1,17 @@
+# --- BLOQUEO DE ARCHIVOS/PASTAS SENSIBLES ---
+# Evita que alguien lea .git, .env, SQL, composer y logs
+RedirectMatch 404 /(\.git|\.env|coldcall_db\.sql|composer\.json|composer\.lock|.*\.log)(/|$)
+
+<FilesMatch "^(composer\.(json|lock)|\.env|coldcall_db\.sql|.*\.log|.*\.bak|.*\.swp)$">
+  Require all denied
+</FilesMatch>
+
+# --- CABECERAS DE SEGURIDAD GLOBALES ---
+Header always set X-Frame-Options "DENY"
+Header always set X-Content-Type-Options "nosniff"
+Header always set Referrer-Policy "no-referrer"
+# Ajusta CSP si usas CDNs; esta versión solo permite recursos locales
+Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'"
+
+# --- DESACTIVAR LISTADO DE DIRECTORIOS ---
+Options -Indexes

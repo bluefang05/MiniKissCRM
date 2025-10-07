@@ -13,19 +13,17 @@ $user = Auth::user();
 $leadId = (int)($_GET['id'] ?? 0);
 $pdo = getPDO();
 
-// Load lead details
+// Load lead details without status
 $stmt = $pdo->prepare("
     SELECT
       l.*,
       so.name   AS source,
       ii.name   AS interest,
-      s.name    AS status,
       ir.description AS income_desc,
       lc.description AS language_desc
     FROM leads l
     LEFT JOIN lead_sources        so ON l.source_id              = so.id
     LEFT JOIN insurance_interests ii ON l.insurance_interest_id  = ii.id
-    LEFT JOIN lead_statuses       s  ON l.status_id              = s.id
     LEFT JOIN income_ranges       ir ON l.income                 = ir.code
     LEFT JOIN language_codes      lc ON l.language               = lc.code
     WHERE l.id = ?
@@ -52,7 +50,7 @@ $docs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <head>
   <meta charset="utf-8">
   <title>Lead #<?= $leadId ?> – Details</title>
-  <link rel="stylesheet" href="./../assets/css/app.css">
+  <link rel="stylesheet" href="./../assets/css/leads/view.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css ">
   <style>
     /* Custom styles */
@@ -173,8 +171,6 @@ $docs = $stmt->fetchAll(PDO::FETCH_ASSOC);
       <dl>
         <dt>SOURCE:</dt>
         <dd><?= htmlspecialchars($lead['source']) ?></dd>
-        <dt>STATUS:</dt>
-        <dd><?= htmlspecialchars($lead['status']) ?></dd>
         <dt>ADDRESS:</dt>
         <dd><?= htmlspecialchars($lead['address_line']) ?></dd>
         <dt>SUITE / APT:</dt>
@@ -248,18 +244,16 @@ $docs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <div class="documents mt-4">
   <h3><i class="fas fa-paperclip"></i> Attached Documents</h3>
   
-  
-  <!-- Document List -->
   <?php if (empty($docs)): ?>
     <p class="text-muted">No documents attached yet.</p>
   <?php else: ?>
-    <ul>
+    <ul class="list-unstyled">
       <?php foreach ($docs as $doc): ?>
         <?php
           $diskName = basename($doc['file_path']);
           $url = './../uploads/lead_documents/' . $diskName;
         ?>
-        <li class="document-item d-flex align-items-center justify-content-between">
+        <li class="document-item">
           <div>
             <i class="fas fa-file-pdf document-icon"></i>
             <span class="document-name">
@@ -277,6 +271,8 @@ $docs = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </ul>
   <?php endif; ?>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap @5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>
 </html>

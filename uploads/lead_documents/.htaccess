@@ -1,0 +1,12 @@
+# --- DESACTIVAR PHP Y SCRIPTS EN UPLOADS ---
+php_flag engine off
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phps
+RemoveType   .php .phtml .php3 .php4 .php5 .php7 .php8 .phps
+
+<FilesMatch "\.(php|phtml|phar|pl|py|cgi|sh|exe|bat|cmd)$">
+  Require all denied
+</FilesMatch>
+
+# Evitar ejecución y listado de archivos
+Header set X-Content-Type-Options "nosniff"
+Options -Indexes

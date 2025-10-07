@@ -14,14 +14,15 @@ $user = Auth::user();
 $roles = $user['roles'] ?? [];
 
 // Capabilities
-$canCreate = (bool) array_intersect($roles, ['admin', 'lead_manager']);
+$canCreate = (bool) array_intersect($roles, ['admin', 'lead_manager', 'sales', 'owner']);
 $canImport = $canCreate;
 $canViewCalls = (bool) array_intersect($roles, ['admin', 'sales']);
 $canManageUsers = in_array('admin', $roles, true);
 $canEdit = $canCreate;
 $canCall = (bool) array_intersect($roles, ['admin', 'sales']);
 $canViewDashboard = (bool) array_intersect($roles, ['admin', 'viewer']);
-$canViewOwnerDashboard = (bool) array_intersect($roles, ['admin', 'owner']);
+$canViewLeadSummary = (bool) array_intersect($roles, ['admin', 'owner']);
+$canViewReferrals = (bool) array_intersect($roles, ['admin', 'owner']);
 
 $pdo = getPDO();
 
@@ -161,7 +162,7 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
 <head>
   <meta charset="UTF-8">
   <title>Leads List</title>
-  <link rel="stylesheet" href="../assets/css/app.css">
+  <link rel="stylesheet" href="../assets/css/leads/list.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     .badge {
@@ -201,49 +202,72 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
     <!-- Actions -->
     <div class="actions">
       <?php if ($canViewDashboard): ?>
-        <!-- Dashboard for users who can view metrics -->
-        <a class="btn-slide" href="../admin/dashboard.php"><i class="fas fa-tachometer-alt"></i><span>
-            Dashboard</span></a>
-        <a class="btn-slide" href="../admin/my_metrics.php"><i class="fas fa-chart-line"></i><span> My Metrics</span></a>
+        <a class="btn-slide" href="../admin/dashboard.php">
+          <i class="fas fa-tachometer-alt"></i><span> Dashboard</span>
+        </a>
+        <a class="btn-slide" href="../admin/my_metrics.php">
+          <i class="fas fa-chart-line"></i><span> My Metrics</span>
+        </a>
       <?php endif; ?>
 
-      <!-- Special dashboard only visible to admin or owner -->
-      <?php if ($canViewOwnerDashboard): ?>
-        <a class="btn-slide" href="./../admin/owner_dashboard.php"><i class="fas fa-crown"></i><span> Owner
-            View</span></a>
+
+
+      <!-- New: Lead‐per‐User Summary -->
+      <?php if ($canViewLeadSummary): ?>
+        <a class="btn-slide" href="../admin/users_lead_summary.php">
+          <i class="fas fa-chart-bar"></i><span> Leads Sales Performance </span>
+        </a>
       <?php endif; ?>
+
+      <?php if ($canViewReferrals): ?>
+        <a class="btn-slide" href="../admin/referrals.php">
+          <i class="fas fa-sitemap"></i><span> Referrals</span>
+        </a>
+      <?php endif; ?>
+
 
       <?php if ($canManageUsers): ?>
-        <!-- Admin-level analytics -->
-        <a class="btn-slide" href="../admin/all_metrics.php"><i class="fas fa-chart-pie"></i><span> All Metrics</span></a>
+        <a class="btn-slide" href="../admin/all_metrics.php">
+          <i class="fas fa-chart-pie"></i><span> All Metrics</span>
+        </a>
       <?php endif; ?>
 
       <?php if ($canViewCalls): ?>
-        <!-- Call-related actions -->
-        <a class="btn-slide" href="../calls/my_interactions.php"><i class="fas fa-phone"></i><span> My Calls</span></a>
-        <a class="btn-slide" href="../calls/list.php"><i class="fas fa-phone-alt"></i><span> All Calls</span></a>
+        <a class="btn-slide" href="../calls/my_interactions.php">
+          <i class="fas fa-phone"></i><span> My Calls</span>
+        </a>
+        <a class="btn-slide" href="../calls/list.php">
+          <i class="fas fa-phone-alt"></i><span> All Calls</span>
+        </a>
       <?php endif; ?>
 
       <?php if ($canCreate): ?>
-        <!-- Lead creation -->
-        <a class="btn-slide" href="add.php"><i class="fas fa-plus-circle"></i><span> New Lead</span></a>
+        <a class="btn-slide" href="add.php">
+          <i class="fas fa-plus-circle"></i><span> New Lead</span>
+        </a>
       <?php endif; ?>
 
       <?php if ($canImport): ?>
-        <!-- Import leads -->
-        <a class="btn-slide" href="import.php"><i class="fas fa-file-import"></i><span> Import Leads</span></a>
+        <a class="btn-slide" href="import.php">
+          <i class="fas fa-file-import"></i><span> Import Leads</span>
+        </a>
       <?php endif; ?>
 
       <?php if ($canManageUsers): ?>
-        <!-- User & document management -->
-        <a class="btn-slide" href="../admin/users.php"><i class="fas fa-users-cog"></i><span> User Management</span></a>
-        <a class="btn-slide" href="../admin/documents.php"><i class="fas fa-folder-open"></i><span> Documents</span></a>
+        <a class="btn-slide" href="../admin/users.php">
+          <i class="fas fa-users-cog"></i><span> User Management</span>
+        </a>
+        <a class="btn-slide" href="../admin/documents.php">
+          <i class="fas fa-folder-open"></i><span> Documents</span>
+        </a>
       <?php endif; ?>
 
       <!-- Logout link always visible -->
-      <a class="btn-slide btn-secondary" href="../auth/logout.php"><i class="fas fa-right-from-bracket"></i><span>
-          Exit</span></a>
+      <a class="btn-slide btn-secondary" href="../auth/logout.php">
+        <i class="fas fa-right-from-bracket"></i><span> Exit</span>
+      </a>
     </div>
+
 
     <!-- Filters Form -->
     <form method="get" class="filters-form">
