@@ -161,7 +161,6 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
   <title>Leads List</title>
   <link rel="stylesheet" href="../assets/css/leads/list.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
 </head>
 
 <body>
@@ -197,33 +196,21 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
         </a>
       <?php endif; ?>
 
-     <?php if ($canViewCalls): ?>
-  <div class="calls-dropdown">
-    <a class="btn-slide" href="#" style="text-decoration: none; pointer-events: none;">
-      <i class="fas fa-phone"></i>
-      <span>Calls</span>
-    </a>
-    <div class="dropdown-menu">
-      <a class="dropdown-item" href="../calls/my_interactions.php">
-        <i class="fas fa-user"></i> My Calls
-      </a>
-      <a class="dropdown-item" href="../calls/list.php">
-        <i class="fas fa-users"></i> All Calls
-      </a>
-    </div>
-  </div>
-<?php endif; ?>
-
-      <?php if ($canCreate): ?>
-        <a class="btn-slide" href="add.php">
-          <i class="fas fa-plus-circle"></i><span> New Lead</span>
-        </a>
-      <?php endif; ?>
-
-      <?php if ($canImport): ?>
-        <a class="btn-slide" href="import.php">
-          <i class="fas fa-file-import"></i><span> Import Leads</span>
-        </a>
+      <?php if ($canViewCalls): ?>
+        <div class="calls-dropdown">
+          <a class="btn-slide" href="#" style="text-decoration: none; pointer-events: none;">
+            <i class="fas fa-phone"></i>
+            <span>Calls</span>
+          </a>
+          <div class="dropdown-menu">
+            <a class="dropdown-item" href="../calls/my_interactions.php">
+              <i class="fas fa-user"></i> My Calls
+            </a>
+            <a class="dropdown-item" href="../calls/list.php">
+              <i class="fas fa-users"></i> All Calls
+            </a>
+          </div>
+        </div>
       <?php endif; ?>
 
       <?php if ($canManageUsers): ?>
@@ -295,6 +282,22 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
       <button type="submit" class="btn"><i class="fas fa-filter"></i> Filter</button>
       <a href="list.php" class="btn btn-secondary">Clear Filters</a>
     </form>
+
+    <!-- Add Lead & Import Leads Buttons - Top Right -->
+    <?php if ($canCreate || $canImport): ?>
+      <div style="display: flex; justify-content: flex-end; margin: 1rem 0;">
+        <?php if ($canImport): ?>
+          <a class="btn-slide" href="import.php" style="background-color: #28a745; color: white; margin-left: 0.5rem;">
+            <i class="fas fa-file-import"></i><span> Import Leads</span>
+          </a>
+        <?php endif; ?>
+        <?php if ($canCreate): ?>
+          <a class="btn-slide" href="add.php" style="background-color: #28a745; color: white; margin-left: 0.5rem;">
+            <i class="fas fa-plus-circle"></i><span> New Lead</span>
+          </a>
+        <?php endif; ?>
+      </div>
+    <?php endif; ?>
 
     <!-- Leads Table -->
     <table class="table">
