@@ -8,8 +8,6 @@ if (!Auth::check()) {
   exit;
 }
 
-
-
 $user = Auth::user();
 $roles = $user['roles'] ?? [];
 
@@ -61,7 +59,6 @@ $filterMap = [
 
 foreach ($filterMap as $key => [$expr, $type]) {
   if (!empty($_GET[$key])) {
-    // Handle operators like >= or <= correctly
     if (preg_match('/[><=]/', $expr)) {
       $conds[] = "$expr ?";
     } else {
@@ -164,35 +161,7 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
   <title>Leads List</title>
   <link rel="stylesheet" href="../assets/css/leads/list.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <style>
-    .badge {
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: .75rem;
-      color: #fff;
-    }
 
-    .badge-green {
-      background: #2c5d4a;
-    }
-
-    .badge-orange {
-      background: #f57c00;
-    }
-
-    .badge-red {
-      background: #d32f2f;
-    }
-
-    .row-actions a {
-      margin-right: 4px;
-    }
-
-    form.filters-form select,
-    form.filters-form input {
-      margin: 0 6px 10px 0;
-    }
-  </style>
 </head>
 
 <body>
@@ -210,12 +179,9 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
         </a>
       <?php endif; ?>
 
-
-
-      <!-- New: Lead‐per‐User Summary -->
       <?php if ($canViewLeadSummary): ?>
         <a class="btn-slide" href="../admin/users_lead_summary.php">
-          <i class="fas fa-chart-bar"></i><span> Leads Sales Performance </span>
+          <i class="fas fa-chart-bar"></i><span> Leads Sales Performance</span>
         </a>
       <?php endif; ?>
 
@@ -225,21 +191,28 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
         </a>
       <?php endif; ?>
 
-
       <?php if ($canManageUsers): ?>
         <a class="btn-slide" href="../admin/all_metrics.php">
           <i class="fas fa-chart-pie"></i><span> All Metrics</span>
         </a>
       <?php endif; ?>
 
-      <?php if ($canViewCalls): ?>
-        <a class="btn-slide" href="../calls/my_interactions.php">
-          <i class="fas fa-phone"></i><span> My Calls</span>
-        </a>
-        <a class="btn-slide" href="../calls/list.php">
-          <i class="fas fa-phone-alt"></i><span> All Calls</span>
-        </a>
-      <?php endif; ?>
+     <?php if ($canViewCalls): ?>
+  <div class="calls-dropdown">
+    <a class="btn-slide" href="#" style="text-decoration: none; pointer-events: none;">
+      <i class="fas fa-phone"></i>
+      <span>Calls</span>
+    </a>
+    <div class="dropdown-menu">
+      <a class="dropdown-item" href="../calls/my_interactions.php">
+        <i class="fas fa-user"></i> My Calls
+      </a>
+      <a class="dropdown-item" href="../calls/list.php">
+        <i class="fas fa-users"></i> All Calls
+      </a>
+    </div>
+  </div>
+<?php endif; ?>
 
       <?php if ($canCreate): ?>
         <a class="btn-slide" href="add.php">
@@ -262,12 +235,10 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
         </a>
       <?php endif; ?>
 
-      <!-- Logout link always visible -->
       <a class="btn-slide btn-secondary" href="../auth/logout.php">
         <i class="fas fa-right-from-bracket"></i><span> Exit</span>
       </a>
     </div>
-
 
     <!-- Filters Form -->
     <form method="get" class="filters-form">
@@ -345,8 +316,8 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
           <tr>
             <td colspan="9" style="text-align:center;">No leads found.</td>
           </tr>
-        <?php else:
-          foreach ($leads as $lead): ?>
+        <?php else: ?>
+          <?php foreach ($leads as $lead): ?>
             <tr>
               <td><?= $lead['id'] ?></td>
               <td><?= htmlspecialchars($lead['full_name']) ?></td>
@@ -375,31 +346,27 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
                 <span class="badge <?= $cls ?>"><?= htmlspecialchars($lead['disposition'] ?? 'No call') ?></span>
               </td>
               <td class="row-actions">
-                <a class="btn btn-sm btn-secondary" title="View" href="view.php?id=<?= $lead['id'] ?>"><i
-                    class="fas fa-eye"></i></a>
+                <a class="btn btn-sm btn-secondary" title="View" href="view.php?id=<?= $lead['id'] ?>"><i class="fas fa-eye"></i></a>
                 <?php if ($canEdit): ?>
-                  <a class="btn btn-sm" title="Edit" style="background:#007bff" href="edit.php?lead_id=<?= $lead['id'] ?>"><i
-                      class="fas fa-pen"></i></a>
+                  <a class="btn btn-sm" title="Edit" style="background:#007bff" href="edit.php?lead_id=<?= $lead['id'] ?>"><i class="fas fa-pen"></i></a>
                 <?php endif; ?>
                 <?php if ($canCall): ?>
-                  <a class="btn btn-sm" title="Call" style="background:#28a745"
-                    href="../calls/add.php?lead_id=<?= $lead['id'] ?>"><i class="fas fa-phone"></i></a>
+                  <a class="btn btn-sm" title="Call" style="background:#28a745" href="../calls/add.php?lead_id=<?= $lead['id'] ?>"><i class="fas fa-phone"></i></a>
                 <?php endif; ?>
                 <?php if ($lead['do_not_call']): ?>
                   <i class="fas fa-ban" title="Do Not Call" style="color:#d32f2f; margin-left:4px;"></i>
                 <?php endif; ?>
                 <?php if (!empty($lead['locked_by'])): ?>
                   <?php if ((int) $lead['locked_by'] === (int) $user['id']): ?>
-                    <i class="fas fa-lock-open" title="Locked by you until <?= $lead['lock_expires'] ?>"
-                      style="color:#2c5d4a;"></i>
+                    <i class="fas fa-lock-open" title="Locked by you until <?= $lead['lock_expires'] ?>" style="color:#2c5d4a;"></i>
                   <?php else: ?>
-                    <i class="fas fa-lock" title="Locked by another user until <?= $lead['lock_expires'] ?>"
-                      style="color:#d32f2f;"></i>
+                    <i class="fas fa-lock" title="Locked by another user until <?= $lead['lock_expires'] ?>" style="color:#d32f2f;"></i>
                   <?php endif; ?>
                 <?php endif; ?>
               </td>
             </tr>
-          <?php endforeach; endif; ?>
+          <?php endforeach; ?>
+        <?php endif; ?>
       </tbody>
     </table>
 
