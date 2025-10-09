@@ -24,7 +24,7 @@ $canViewReferrals = (bool) array_intersect($roles, ['admin', 'owner']);
 
 // CSRF token for delete
 if (empty($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 $csrf = $_SESSION['csrf_token'];
 
@@ -185,6 +185,7 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
       cursor: pointer;
       font-size: 0.85rem;
     }
+
     .btn-delete:hover {
       background-color: #c82333;
     }
@@ -196,30 +197,34 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0,0,0,0.5);
+      background: rgba(0, 0, 0, 0.5);
       display: none;
       justify-content: center;
       align-items: center;
       z-index: 1000;
     }
+
     .modal {
       background: white;
       padding: 24px;
       border-radius: 12px;
       max-width: 500px;
       width: 90%;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
+
     .modal h3 {
       margin-top: 0;
       color: #333;
     }
+
     .modal-buttons {
       display: flex;
       justify-content: flex-end;
       gap: 12px;
       margin-top: 20px;
     }
+
     .btn-modal {
       padding: 8px 16px;
       border: none;
@@ -227,17 +232,21 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
       cursor: pointer;
       font-weight: 500;
     }
+
     .btn-modal.cancel {
       background: #6c757d;
       color: white;
     }
+
     .btn-modal.delete {
       background: #dc3545;
       color: white;
     }
+
     .btn-modal.delete:hover {
       background: #c82333;
     }
+
     .btn-modal.cancel:hover {
       background: #5a6268;
     }
@@ -256,12 +265,19 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
       transform: translateY(-20px);
       transition: opacity 0.3s, transform 0.3s;
     }
+
     .toast.show {
       opacity: 1;
       transform: translateY(0);
     }
-    .toast.success { background: #28a745; }
-    .toast.error { background: #dc3545; }
+
+    .toast.success {
+      background: #28a745;
+    }
+
+    .toast.error {
+      background: #dc3545;
+    }
   </style>
 </head>
 
@@ -387,14 +403,17 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
 
     <!-- Add Lead & Import Leads Buttons - Top Right -->
     <?php if ($canCreate || $canImport): ?>
-      <div style="display: flex; justify-content: flex-end; margin: 1rem 0;">
+      <div style="display: flex; justify-content: flex-end; margin: 1rem 0; gap: 0.5rem; flex-wrap: wrap;">
         <?php if ($canImport): ?>
-          <a class="btn-slide" href="import.php" style="background-color: #28a745; color: white; margin-left: 0.5rem;">
-            <i class="fas fa-file-import"></i><span> Import Leads</span>
+          <a class="btn-slide" href="import.php" style="background-color: #28a745; color: white;">
+            <i class="fas fa-file-import"></i><span> Import Standard</span>
+          </a>
+          <a class="btn-slide" href="import_custom.php" style="background-color: #198754; color: white;">
+            <i class="fas fa-file-csv"></i><span> Import Custom Format</span>
           </a>
         <?php endif; ?>
         <?php if ($canCreate): ?>
-          <a class="btn-slide" href="add.php" style="background-color: #28a745; color: white; margin-left: 0.5rem;">
+          <a class="btn-slide" href="add.php" style="background-color: #0d6efd; color: white;">
             <i class="fas fa-plus-circle"></i><span> New Lead</span>
           </a>
         <?php endif; ?>
@@ -451,30 +470,32 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
                 <span class="badge <?= $cls ?>"><?= htmlspecialchars($lead['disposition'] ?? 'No call') ?></span>
               </td>
               <td class="row-actions">
-                <a class="btn btn-sm btn-secondary" title="View" href="view.php?id=<?= $lead['id'] ?>"><i class="fas fa-eye"></i></a>
+                <a class="btn btn-sm btn-secondary" title="View" href="view.php?id=<?= $lead['id'] ?>"><i
+                    class="fas fa-eye"></i></a>
                 <?php if ($canEdit): ?>
-                  <a class="btn btn-sm" title="Edit" style="background:#007bff" href="edit.php?lead_id=<?= $lead['id'] ?>"><i class="fas fa-pen"></i></a>
+                  <a class="btn btn-sm" title="Edit" style="background:#007bff" href="edit.php?lead_id=<?= $lead['id'] ?>"><i
+                      class="fas fa-pen"></i></a>
                 <?php endif; ?>
                 <?php if ($canCall): ?>
-                  <a class="btn btn-sm" title="Call" style="background:#28a745" href="../calls/add.php?lead_id=<?= $lead['id'] ?>"><i class="fas fa-phone"></i></a>
+                  <a class="btn btn-sm" title="Call" style="background:#28a745"
+                    href="../calls/add.php?lead_id=<?= $lead['id'] ?>"><i class="fas fa-phone"></i></a>
                 <?php endif; ?>
                 <?php if ($lead['do_not_call']): ?>
                   <i class="fas fa-ban" title="Do Not Call" style="color:#d32f2f; margin-left:4px;"></i>
                 <?php endif; ?>
                 <?php if (!empty($lead['locked_by'])): ?>
                   <?php if ((int) $lead['locked_by'] === (int) $user['id']): ?>
-                    <i class="fas fa-lock-open" title="Locked by you until <?= $lead['lock_expires'] ?>" style="color:#2c5d4a;"></i>
+                    <i class="fas fa-lock-open" title="Locked by you until <?= $lead['lock_expires'] ?>"
+                      style="color:#2c5d4a;"></i>
                   <?php else: ?>
-                    <i class="fas fa-lock" title="Locked by another user until <?= $lead['lock_expires'] ?>" style="color:#d32f2f;"></i>
+                    <i class="fas fa-lock" title="Locked by another user until <?= $lead['lock_expires'] ?>"
+                      style="color:#d32f2f;"></i>
                   <?php endif; ?>
                 <?php endif; ?>
                 <?php if ($canDeleteLead): ?>
-                  <button type="button" 
-                          class="btn-delete" 
-                          title="Delete Lead"
-                          data-lead-id="<?= (int)$lead['id'] ?>"
-                          data-lead-name="<?= htmlspecialchars($lead['full_name'], ENT_QUOTES, 'UTF-8') ?>"
-                          data-csrf="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                  <button type="button" class="btn-delete" title="Delete Lead" data-lead-id="<?= (int) $lead['id'] ?>"
+                    data-lead-name="<?= htmlspecialchars($lead['full_name'], ENT_QUOTES, 'UTF-8') ?>"
+                    data-csrf="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                     <i class="fas fa-times"></i>
                   </button>
                 <?php endif; ?>
@@ -516,78 +537,78 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
   <div id="toast" class="toast"></div>
 
   <script>
-  let currentLeadId = null;
-  let currentCsrf = null;
+    let currentLeadId = null;
+    let currentCsrf = null;
 
-  function showToast(message, type = 'success') {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.className = `toast ${type} show`;
-    setTimeout(() => {
-      toast.classList.remove('show');
-    }, 3000);
-  }
-
-  function openDeleteModal(leadId, leadName, csrfToken) {
-    currentLeadId = leadId;
-    currentCsrf = csrfToken;
-    document.getElementById('modalMessage').textContent = 
-      `Are you sure you want to delete the lead ${leadName}?`;
-    document.getElementById('deleteModal').style.display = 'flex';
-  }
-
-  function closeDeleteModal() {
-    document.getElementById('deleteModal').style.display = 'none';
-    currentLeadId = null;
-    currentCsrf = null;
-  }
-
-  async function handleDelete() {
-    if (!currentLeadId || !currentCsrf) return;
-
-    try {
-      const response = await fetch('delete_lead.php', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          lead_id: currentLeadId,
-          csrf_token: currentCsrf
-        })
-      });
-
-      const result = await response.json();
-
-      if (response.ok && result.success) {
-        const row = document.querySelector(`.btn-delete[data-lead-id="${currentLeadId}"]`).closest('tr');
-        if (row) row.remove();
-        showToast('Lead deleted successfully.');
-      } else {
-        showToast(result.message || 'Unable to delete the lead. Please try again later.', 'error');
-      }
-    } catch (error) {
-      showToast('Unable to delete the lead. Please try again later.', 'error');
-    } finally {
-      closeDeleteModal();
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast ${type} show`;
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
     }
-  }
 
-  document.querySelectorAll('.btn-delete').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-lead-id');
-      const name = btn.getAttribute('data-lead-name');
-      const csrf = btn.getAttribute('data-csrf');
-      openDeleteModal(id, name, csrf);
+    function openDeleteModal(leadId, leadName, csrfToken) {
+      currentLeadId = leadId;
+      currentCsrf = csrfToken;
+      document.getElementById('modalMessage').textContent =
+        `Are you sure you want to delete the lead ${leadName}?`;
+      document.getElementById('deleteModal').style.display = 'flex';
+    }
+
+    function closeDeleteModal() {
+      document.getElementById('deleteModal').style.display = 'none';
+      currentLeadId = null;
+      currentCsrf = null;
+    }
+
+    async function handleDelete() {
+      if (!currentLeadId || !currentCsrf) return;
+
+      try {
+        const response = await fetch('delete_lead.php', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            lead_id: currentLeadId,
+            csrf_token: currentCsrf
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          const row = document.querySelector(`.btn-delete[data-lead-id="${currentLeadId}"]`).closest('tr');
+          if (row) row.remove();
+          showToast('Lead deleted successfully.');
+        } else {
+          showToast(result.message || 'Unable to delete the lead. Please try again later.', 'error');
+        }
+      } catch (error) {
+        showToast('Unable to delete the lead. Please try again later.', 'error');
+      } finally {
+        closeDeleteModal();
+      }
+    }
+
+    document.querySelectorAll('.btn-delete').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-lead-id');
+        const name = btn.getAttribute('data-lead-name');
+        const csrf = btn.getAttribute('data-csrf');
+        openDeleteModal(id, name, csrf);
+      });
     });
-  });
 
-  document.getElementById('modalCancel').addEventListener('click', closeDeleteModal);
-  document.getElementById('modalDelete').addEventListener('click', handleDelete);
+    document.getElementById('modalCancel').addEventListener('click', closeDeleteModal);
+    document.getElementById('modalDelete').addEventListener('click', handleDelete);
 
-  document.getElementById('deleteModal').addEventListener('click', (e) => {
-    if (e.target.id === 'deleteModal') closeDeleteModal();
-  });
+    document.getElementById('deleteModal').addEventListener('click', (e) => {
+      if (e.target.id === 'deleteModal') closeDeleteModal();
+    });
   </script>
 </body>
 
