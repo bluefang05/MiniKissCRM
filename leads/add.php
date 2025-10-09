@@ -27,13 +27,13 @@ if (!Auth::check()) {
 $user = Auth::user();
 $pdo  = getPDO();
 
-// Sólo roles permitidos
+// Only allowed roles
 $allowedRoles = ['admin', 'lead_manager'];
 if (!array_intersect($allowedRoles, $user['roles'] ?? [])) {
-    die('<div class="container"><h1>Acceso denegado</h1></div>');
+    die('<div class="container"><h1>Access denied</h1></div>');
 }
 
-// Cargar opciones del formulario
+// Load select options for the form
 $sources   = $pdo->query("SELECT id, name FROM lead_sources WHERE active=1 ORDER BY name")->fetchAll();
 $interests = $pdo->query("SELECT id, name FROM insurance_interests WHERE active=1 ORDER BY name")->fetchAll();
 $languages = $pdo->query("SELECT code, description FROM language_codes ORDER BY description")->fetchAll();
@@ -43,7 +43,7 @@ $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        // Validar campos obligatorios (sin status_id ahora)
+        // Validate required fields (no status_id here)
         $requiredFields = ['first_name', 'last_name', 'phone', 'insurance_interest_id', 'source_id'];
         foreach ($requiredFields as $field) {
             if (empty($_POST[$field])) {
@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // Preparar datos
+        // Prepare data
         $data = [
             'external_id'           => trim($_POST['external_id']) ?: uniqid('lead_', true),
             'prefix'                => trim($_POST['prefix']) ?: null,
@@ -73,17 +73,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'do_not_call'           => !empty($_POST['do_not_call']) ? 1 : 0,
             'taken_by'              => null,
             'taken_at'              => null,
-            // --- NUEVO: quién subió el lead ---
+            // NEW: who uploaded the lead
             'uploaded_by'           => $user['id'],
         ];
 
-        // Crear Lead
+        // Create Lead
         $newId = Lead::create($data);
 
         // Audit log
         AuditLog::log($user['id'], 'create_lead', "id={$newId}");
 
-        // Redirigir a la vista del lead nuevo
+        // Redirect to the newly created lead
         header("Location: view.php?id={$newId}");
         exit;
 
@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <title>Add New Lead</title>
   <link rel="stylesheet" href="./../assets/css/leads/add.css">
   <style>
-    /* Limitar el ancho de los selects para que no ocupen todo el ancho */
+    /* Keep selects from taking full width */
     select {
       width: auto;
       min-width: 200px;
@@ -237,11 +237,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </div>
     </div>
 
-    <!-- Acciones -->
+    <!-- Actions -->
     <div class="actions">
       <button type="submit" class="btn">Save Lead</button>
       <a href="list.php" class="btn-secondary">Back to List</a>
     </div>
+  </form>
 </div>
 
 </body>

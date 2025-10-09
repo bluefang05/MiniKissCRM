@@ -22,6 +22,15 @@ $canViewDashboard = (bool) array_intersect($roles, ['admin', 'viewer']);
 $canViewLeadSummary = (bool) array_intersect($roles, ['admin', 'owner']);
 $canViewReferrals = (bool) array_intersect($roles, ['admin', 'owner']);
 
+// CSRF token for delete
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrf = $_SESSION['csrf_token'];
+
+// Only admin or owner can delete
+$canDeleteLead = in_array('admin', $roles, true) || in_array('owner', $roles, true);
+
 $pdo = getPDO();
 
 //---------------------------------------------
@@ -161,6 +170,99 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
   <title>Leads List</title>
   <link rel="stylesheet" href="../assets/css/leads/list.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    /* Delete button - matches size/style of other .btn-sm */
+    .btn-delete {
+      background-color: #dc3545;
+      color: white;
+      border: none;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .btn-delete:hover {
+      background-color: #c82333;
+    }
+
+    /* Modal styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      max-width: 500px;
+      width: 90%;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .modal h3 {
+      margin-top: 0;
+      color: #333;
+    }
+    .modal-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .btn-modal {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .btn-modal.cancel {
+      background: #6c757d;
+      color: white;
+    }
+    .btn-modal.delete {
+      background: #dc3545;
+      color: white;
+    }
+    .btn-modal.delete:hover {
+      background: #c82333;
+    }
+    .btn-modal.cancel:hover {
+      background: #5a6268;
+    }
+
+    /* Notification toast */
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      border-radius: 8px;
+      color: white;
+      font-weight: 500;
+      z-index: 2000;
+      opacity: 0;
+      transform: translateY(-20px);
+      transition: opacity 0.3s, transform 0.3s;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .toast.success { background: #28a745; }
+    .toast.error { background: #dc3545; }
+  </style>
 </head>
 
 <body>
@@ -366,6 +468,16 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
                     <i class="fas fa-lock" title="Locked by another user until <?= $lead['lock_expires'] ?>" style="color:#d32f2f;"></i>
                   <?php endif; ?>
                 <?php endif; ?>
+                <?php if ($canDeleteLead): ?>
+                  <button type="button" 
+                          class="btn-delete" 
+                          title="Delete Lead"
+                          data-lead-id="<?= (int)$lead['id'] ?>"
+                          data-lead-name="<?= htmlspecialchars($lead['full_name'], ENT_QUOTES, 'UTF-8') ?>"
+                          data-csrf="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                    <i class="fas fa-times"></i>
+                  </button>
+                <?php endif; ?>
               </td>
             </tr>
           <?php endforeach; ?>
@@ -388,6 +500,95 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
       </div>
     <?php endif; ?>
   </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="deleteModal" class="modal-overlay">
+    <div class="modal">
+      <h3 id="modalMessage">Are you sure you want to delete this lead?</h3>
+      <div class="modal-buttons">
+        <button class="btn-modal cancel" id="modalCancel">Cancel</button>
+        <button class="btn-modal delete" id="modalDelete">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast"></div>
+
+  <script>
+  let currentLeadId = null;
+  let currentCsrf = null;
+
+  function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = `toast ${type} show`;
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 3000);
+  }
+
+  function openDeleteModal(leadId, leadName, csrfToken) {
+    currentLeadId = leadId;
+    currentCsrf = csrfToken;
+    document.getElementById('modalMessage').textContent = 
+      `Are you sure you want to delete the lead ${leadName}?`;
+    document.getElementById('deleteModal').style.display = 'flex';
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('deleteModal').style.display = 'none';
+    currentLeadId = null;
+    currentCsrf = null;
+  }
+
+  async function handleDelete() {
+    if (!currentLeadId || !currentCsrf) return;
+
+    try {
+      const response = await fetch('delete_lead.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          lead_id: currentLeadId,
+          csrf_token: currentCsrf
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        const row = document.querySelector(`.btn-delete[data-lead-id="${currentLeadId}"]`).closest('tr');
+        if (row) row.remove();
+        showToast('Lead deleted successfully.');
+      } else {
+        showToast(result.message || 'Unable to delete the lead. Please try again later.', 'error');
+      }
+    } catch (error) {
+      showToast('Unable to delete the lead. Please try again later.', 'error');
+    } finally {
+      closeDeleteModal();
+    }
+  }
+
+  document.querySelectorAll('.btn-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-lead-id');
+      const name = btn.getAttribute('data-lead-name');
+      const csrf = btn.getAttribute('data-csrf');
+      openDeleteModal(id, name, csrf);
+    });
+  });
+
+  document.getElementById('modalCancel').addEventListener('click', closeDeleteModal);
+  document.getElementById('modalDelete').addEventListener('click', handleDelete);
+
+  document.getElementById('deleteModal').addEventListener('click', (e) => {
+    if (e.target.id === 'deleteModal') closeDeleteModal();
+  });
+  </script>
 </body>
 
 </html>

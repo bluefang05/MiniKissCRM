@@ -100,49 +100,102 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception('CSV has no header row.');
         }
 
-        // 5) Normalize headers
-        $normalized = [];
-        foreach ($header as $h) {
-            $col = preg_replace('/[^a-z0-9_]+/', '_', strtolower(trim($h)));
-            if ($col === 'address')         $col = 'address_line';
-            if ($col === 'suite_apt')       $col = 'suite_apt';
-            if ($col === 'delivery_po')     $col = 'delivery_point_bar_code';
-            if ($col === 'carrier_rou')     $col = 'carrier_route';
-            if ($col === 'fips_county_cod') $col = 'fips_county_code';
-            if ($col === 'county_nam')      $col = 'county_name';
-            $normalized[] = $col;
-        }
-        $map = array_flip($normalized);
+        // ====== 5) SMART COLUMN MAPPING WITH ALIASES ======
+        $fieldAliases = [
+            'prefix'      => ['prefix', 'title', 'titulo', 'salutation'],
+            'first_name'  => ['first_name', 'fname', 'name', 'nombre', 'first', 'firstname', 'given_name', 'primer_nombre'],
+            'mi'          => ['mi', 'middle_initial', 'middle', 'segunda_letra', 'initial'],
+            'last_name'   => ['last_name', 'lname', 'apellido', 'last', 'lastname', 'surname', 'family_name', 'apellidos'],
+            'phone'       => ['phone', 'telefono', 'tel', 'mobile', 'cell', 'celular', 'phone_number', 'movil', 'whatsapp'],
+            'email'       => ['email', 'correo', 'mail', 'e_mail', 'email_address', 'correo_electronico'],
+            'address_line'=> ['address', 'direccion', 'address_line', 'street', 'calle', 'dir', 'domicilio'],
+            'suite_apt'   => ['suite', 'apto', 'apartment', 'unit', 'depto', 'apartamento', 'interior', 'suite_apt'],
+            'city'        => ['city', 'ciudad', 'town', 'municipio', 'localidad'],
+            'state'       => ['state', 'estado', 'province', 'region', 'provincia', 'st'],
+            'zip5'        => ['zip', 'zipcode', 'postal_code', 'cp', 'codigo_postal', 'zip5', 'postcode'],
+            'zip4'        => ['zip4', 'plus4', 'codigo_postal4'],
+            'delivery_point_bar_code' => ['delivery_point_bar_code', 'dpbc', 'barcode'],
+            'carrier_route'=> ['carrier_route', 'route', 'ruta'],
+            'fips_county_code' => ['fips_county_code', 'fips', 'county_code'],
+            'county_name' => ['county_name', 'county', 'condado', 'municipio'],
+            'age'         => ['age', 'edad', 'years'],
+            'language'    => ['language', 'idioma', 'lang', 'lenguaje'],
+            'income'      => ['income', 'ingresos', 'salary', 'renta', 'ingreso', 'sueldo'],
+            'external_id' => ['id', 'lead_id', 'external_id', 'ref', 'reference', 'clave', 'folio'],
+            'interest'    => ['interest', 'producto', 'insurance_type', 'tipo_seguro', 'producto_interes', 'seguro'],
+        ];
 
-        // 6) Require minimal columns
-        foreach (['first_name', 'last_name', 'phone'] as $c) {
-            if (!isset($map[$c])) {
-                throw new Exception("Missing required CSV column: $c");
+        // Normalize header
+        $normalizedHeader = array_map(fn($h) => strtolower(trim($h)), $header);
+        $colIndex = array_flip($normalizedHeader);
+
+        // Build map: system field → CSV column name
+        $mapByField = [];
+        foreach ($fieldAliases as $systemField => $aliases) {
+            foreach ($aliases as $alias) {
+                if (in_array($alias, $normalizedHeader)) {
+                    $mapByField[$systemField] = $alias;
+                    break;
+                }
             }
         }
 
-        $hasCsvInterest = isset($map['interest']);
-        $hasCsvLanguage = isset($map['language']);
-        $hasCsvIncome   = isset($map['income']);
-        $hasExtId       = isset($map['external_id']);
+        // Require minimal columns
+        $requiredFields = ['first_name', 'last_name', 'phone'];
+        foreach ($requiredFields as $field) {
+            if (!isset($mapByField[$field])) {
+                throw new Exception("Missing required column for: $field. Detected columns: " . implode(', ', $normalizedHeader));
+            }
+        }
 
-        // 7) Prepare upsert
+        $hasCsvInterest = isset($mapByField['interest']);
+        $hasCsvLanguage = isset($mapByField['language']);
+        $hasCsvIncome   = isset($mapByField['income']);
+        $hasExtId       = isset($mapByField['external_id']);
+
+        // 6) Prepare upsert
         $existsStmt = $pdo->prepare('SELECT id FROM leads WHERE external_id = ? LIMIT 1');
         $created    = $updated = $skipped = 0;
         $pdo->beginTransaction();
         $generatedIds = [];
 
-        // 8) Process each row
+        // 7) Process each row
         while (($row = fgetcsv($fh)) !== false) {
             if (!$row || count(array_filter($row, fn($v) => trim((string)$v) !== '')) === 0) {
                 continue;
             }
 
-            // Build data array from CSV
-            $data = [];
-            foreach ($map as $col => $i) {
-                $data[$col] = $row[$i] ?? null;
-            }
+            // Helper to get value by system field name
+            $get = function(string $field) use ($mapByField, $colIndex, $row) {
+                $csvCol = $mapByField[$field] ?? null;
+                if ($csvCol === null) return null;
+                $i = $colIndex[$csvCol] ?? null;
+                return ($i === null) ? null : ($row[$i] ?? null);
+            };
+
+            $data = [
+                'prefix'      => $get('prefix'),
+                'first_name'  => $get('first_name'),
+                'mi'          => $get('mi'),
+                'last_name'   => $get('last_name'),
+                'phone'       => $get('phone'),
+                'email'       => $get('email'),
+                'address_line'=> $get('address_line'),
+                'suite_apt'   => $get('suite_apt'),
+                'city'        => $get('city'),
+                'state'       => $get('state'),
+                'zip5'        => $get('zip5'),
+                'zip4'        => $get('zip4'),
+                'delivery_point_bar_code' => $get('delivery_point_bar_code'),
+                'carrier_route'=> $get('carrier_route'),
+                'fips_county_code'=> $get('fips_county_code'),
+                'county_name' => $get('county_name'),
+                'age'         => $get('age'),
+                'language'    => $get('language'),
+                'income'      => $get('income'),
+                'external_id' => $get('external_id'),
+                'interest'    => $get('interest'),
+            ];
 
             // Clean phone
             if (!empty($data['phone'])) {
@@ -180,10 +233,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Required fixed fields
             $data['source_id']   = $sourceId;
             $data['do_not_call'] = 0;
-            // --- NUEVO: quién subió el lead ---
             $data['uploaded_by'] = $user['id'];
 
-            // Whitelist columns (sin status_id)
+            // Whitelist columns
             $allowed = [
                 'external_id','prefix','first_name','mi','last_name',
                 'phone','email','address_line','suite_apt','city',
@@ -214,7 +266,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $pdo->commit();
 
-        // 9) Audit
+        // 8) Audit
         AuditLog::log(
             $user['id'],
             'import_leads',

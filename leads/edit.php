@@ -1,6 +1,6 @@
 <?php
 // leads/edit.php
-// Edita los datos del lead + gestiona subida/listado de documentos
+// Edit lead data + manage document upload/listing
 declare(strict_types=1);
 
 require_once __DIR__ . '/../lib/Auth.php';
@@ -14,7 +14,7 @@ if (!Auth::check()) {
 $user = Auth::user();
 $pdo  = getPDO();
 
-// -------- Helpers CSRF --------
+// -------- CSRF Helpers --------
 if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -23,7 +23,7 @@ function csrf_check(string $token): bool {
 }
 $csrf = (string)$_SESSION['csrf_token'];
 
-// -------- Helpers Archivos --------
+// -------- File Helpers --------
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
 $ALLOWED_EXT  = ['pdf','png','jpg','jpeg','docx','xlsx'];
 $ALLOWED_MIME = [
@@ -41,50 +41,49 @@ function uuidv4(): string {
   return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
 }
 
-// -------- ID lead --------
+// -------- Lead ID --------
 $leadId = (int)($_GET['id'] ?? $_GET['lead_id'] ?? 0);
 if ($leadId <= 0) {
   http_response_code(400);
-  exit('Lead inválido.');
+  exit('Invalid lead.');
 }
 
-// -------- Lookups para selects --------
+// -------- Lookups for selects --------
 $sources      = $pdo->query("SELECT id, name FROM lead_sources WHERE active=1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
 $interests    = $pdo->query("SELECT id, name FROM insurance_interests WHERE active=1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
 $languages    = $pdo->query("SELECT code, description FROM language_codes ORDER BY description")->fetchAll(PDO::FETCH_ASSOC);
 $incomes      = $pdo->query("SELECT code, description FROM income_ranges ORDER BY description")->fetchAll(PDO::FETCH_ASSOC);
 
-// -------- Traer lead --------
+// -------- Fetch lead --------
 $stmt = $pdo->prepare("SELECT * FROM leads WHERE id = ?");
 $stmt->execute([$leadId]);
 $lead = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$lead) {
   http_response_code(404);
-  exit('Lead no encontrado.');
+  exit('Lead not found.');
 }
 
-// -------- Saber si está locked por otro (para avisar) --------
+// -------- Check if locked by another user (for warning) --------
 $lockStmt = $pdo->prepare("SELECT user_id, expires_at FROM lead_locks WHERE lead_id=? AND expires_at>=NOW()");
 $lockStmt->execute([$leadId]);
 $lock = $lockStmt->fetch(PDO::FETCH_ASSOC);
 $isLockedByOther = $lock && (int)$lock['user_id'] !== (int)$user['id'];
 $lockExpires     = $lock['expires_at'] ?? null;
 
-// -------- Manejo POST (dos acciones): guardar lead / subir doc --------
-$flash = null;       // mensajes del formulario de lead
-$uploadMessage = null; // mensajes del formulario de documentos
+// -------- Handle POST (three actions): save lead / upload doc / delete lead --------
+$flash = null;
+$uploadMessage = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if (!csrf_check((string)($_POST['csrf_token'] ?? ''))) {
     http_response_code(403);
-    exit('CSRF inválido');
+    exit('Invalid CSRF token');
   }
 
   $action = (string)($_POST['__action'] ?? '');
 
-  // --- 1) Guardar datos del lead ---
+  // --- 1) Save lead data ---
   if ($action === 'save_lead') {
-    // Campos editables (usa los que tienes en la tabla)
     $prefix     = trim((string)($_POST['prefix'] ?? ''));
     $first_name = trim((string)($_POST['first_name'] ?? ''));
     $mi         = trim((string)($_POST['mi'] ?? ''));
@@ -100,18 +99,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $age        = $_POST['age'] !== '' ? (int)$_POST['age'] : null;
 
     $interest_id = $_POST['insurance_interest_id'] !== '' ? (int)$_POST['insurance_interest_id'] : null;
-    $source_id   = $_POST['source_id'] !== '' ? (int)$_POST['source_id'] : $lead['source_id']; // conserva si no se manda
+    $source_id   = $_POST['source_id'] !== '' ? (int)$_POST['source_id'] : $lead['source_id'];
     $income      = trim((string)($_POST['income'] ?? ''));
     $language    = trim((string)($_POST['language'] ?? ''));
     $notes       = trim((string)($_POST['notes'] ?? ''));
     $do_not_call = isset($_POST['do_not_call']) ? 1 : 0;
 
-    // Validaciones simples
     $errors = [];
-    if ($first_name === '' || $last_name === '') $errors[] = 'Nombre y apellido son requeridos.';
-    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Email inválido.';
-    if ($state !== '' && strlen($state) !== 2) $errors[] = 'State debe ser de 2 letras.';
-    if ($zip5 !== '' && strlen($zip5) !== 5) $errors[] = 'ZIP5 debe ser de 5 dígitos.';
+    if ($first_name === '' || $last_name === '') $errors[] = 'First and last name are required.';
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Invalid email.';
+    if ($state !== '' && strlen($state) !== 2) $errors[] = 'State must be 2 letters.';
+    if ($zip5 !== '' && strlen($zip5) !== 5) $errors[] = 'ZIP5 must be 5 digits.';
 
     if ($errors) {
       $flash = ['type' => 'error', 'text' => implode(' ', $errors)];
@@ -147,44 +145,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $leadId
       ]);
 
-      // Refrescar $lead
       $stmt = $pdo->prepare("SELECT * FROM leads WHERE id = ?");
       $stmt->execute([$leadId]);
       $lead = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      $flash = ['type' => 'success', 'text' => 'Lead actualizado correctamente.'];
+      $flash = ['type' => 'success', 'text' => 'Lead updated successfully.'];
     }
   }
 
-  // --- 2) Subir documento ---
+  // --- 2) Upload document ---
   if ($action === 'upload_doc') {
     $title = trim((string)($_POST['title'] ?? ''));
     $file  = $_FILES['file'] ?? null;
 
     if ($title === '' || mb_strlen($title) > 255) {
-      $uploadMessage = ['type' => 'error', 'text' => 'Título inválido.'];
+      $uploadMessage = ['type' => 'error', 'text' => 'Invalid title.'];
     } elseif (!$file || $file['error'] !== UPLOAD_ERR_OK) {
-      $uploadMessage = ['type' => 'error', 'text' => 'Archivo faltante o con error.'];
+      $uploadMessage = ['type' => 'error', 'text' => 'File missing or upload error.'];
     } elseif ($file['size'] <= 0 || $file['size'] > MAX_FILE_BYTES) {
-      $uploadMessage = ['type' => 'error', 'text' => 'Archivo vacío o supera 10MB.'];
+      $uploadMessage = ['type' => 'error', 'text' => 'File is empty or exceeds 10MB.'];
     } else {
       $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
       if (!in_array($ext, $ALLOWED_EXT, true)) {
-        $uploadMessage = ['type' => 'error', 'text' => 'Extensión no permitida.'];
+        $uploadMessage = ['type' => 'error', 'text' => 'File extension not allowed.'];
       } else {
         $finfo = new finfo(FILEINFO_MIME_TYPE);
         $mime  = $finfo->file($file['tmp_name']) ?: 'application/octet-stream';
         if (!in_array($mime, $ALLOWED_MIME, true)) {
-          $uploadMessage = ['type' => 'error', 'text' => 'Tipo de archivo no permitido.'];
+          $uploadMessage = ['type' => 'error', 'text' => 'File type not allowed.'];
         } else {
           $storedName = uuidv4() . '.' . $ext;
           $storageDir = __DIR__ . '/../storage/lead_documents/';
           if (!is_dir($storageDir) && !mkdir($storageDir, 0775, true) && !is_dir($storageDir)) {
-            $uploadMessage = ['type' => 'error', 'text' => 'No se pudo crear la carpeta de almacenamiento.'];
+            $uploadMessage = ['type' => 'error', 'text' => 'Could not create storage folder.'];
           } else {
             $destPath = $storageDir . $storedName;
             if (!move_uploaded_file($file['tmp_name'], $destPath)) {
-              $uploadMessage = ['type' => 'error', 'text' => 'No se pudo guardar el archivo.'];
+              $uploadMessage = ['type' => 'error', 'text' => 'Could not save the file.'];
             } else {
               $ins = $pdo->prepare("
                 INSERT INTO lead_documents (lead_id, title, file_name, file_path, file_type, uploaded_by)
@@ -198,16 +195,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $mime,
                 (int)$user['id'],
               ]);
-              $uploadMessage = ['type' => 'success', 'text' => 'Documento subido correctamente.'];
+              $uploadMessage = ['type' => 'success', 'text' => 'Document uploaded successfully.'];
             }
           }
         }
       }
     }
   }
+
+  // --- 3) Delete lead ---
+  if ($action === 'delete_lead') {
+    $del = $pdo->prepare("DELETE FROM leads WHERE id = ?");
+    $del->execute([$leadId]);
+    header('Location: list.php?deleted=1');
+    exit;
+  }
 }
 
-// -------- Documentos del lead --------
+// -------- Lead documents --------
 $docsStmt = $pdo->prepare("
   SELECT id, title, file_name, file_type, uploaded_at
   FROM lead_documents
@@ -219,7 +224,7 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 ?>
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Edit Lead #<?= htmlspecialchars((string)$leadId, ENT_QUOTES, 'UTF-8') ?></title>
@@ -239,6 +244,7 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
     label i{margin-right:6px;}
     .btn{display:inline-block;padding:10px 14px;border-radius:10px;background:#0d6efd;color:#fff;text-decoration:none;border:0;cursor:pointer;}
     .btn-secondary{background:#6c757d;}
+    .btn-danger{background:#dc3545;}
     .row{display:flex;gap:8px;}
   </style>
 </head>
@@ -248,8 +254,8 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
 
     <?php if ($isLockedByOther): ?>
       <div class="alert alert-warn">
-        <i class="fas fa-lock"></i> Este lead está siendo usado por otro usuario hasta
-        <strong><?= htmlspecialchars((string)$lockExpires, ENT_QUOTES, 'UTF-8') ?></strong>. Puedes revisar la información, pero **mejor evita guardar cambios** para no pisarlos.
+        <i class="fas fa-lock"></i> This lead is currently being edited by another user until
+        <strong><?= htmlspecialchars((string)$lockExpires, ENT_QUOTES, 'UTF-8') ?></strong>. You can view the information, but <strong>please avoid saving changes</strong> to prevent overwriting their work.
       </div>
     <?php endif; ?>
 
@@ -260,20 +266,20 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
     <?php endif; ?>
 
     <div class="grid">
-      <!-- Columna izquierda: Form de edición -->
+      <!-- Left column: Edit form -->
       <div class="card">
-        <h2><i class="fas fa-id-card"></i> Datos del Lead</h2>
+        <h2><i class="fas fa-id-card"></i> Lead Details</h2>
         <form method="post" autocomplete="off">
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
           <input type="hidden" name="__action" value="save_lead">
 
           <div class="row">
             <div class="form-group" style="flex:1;">
-              <label for="prefix">Prefijo</label>
+              <label for="prefix">Prefix</label>
               <input class="form-control" type="text" id="prefix" name="prefix" value="<?= htmlspecialchars((string)($lead['prefix'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             </div>
             <div class="form-group" style="flex:2;">
-              <label for="first_name">Nombre *</label>
+              <label for="first_name">First Name *</label>
               <input class="form-control" type="text" id="first_name" name="first_name" required value="<?= htmlspecialchars((string)$lead['first_name'], ENT_QUOTES, 'UTF-8') ?>">
             </div>
             <div class="form-group" style="flex:1;">
@@ -281,14 +287,14 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
               <input class="form-control" type="text" id="mi" name="mi" value="<?= htmlspecialchars((string)($lead['mi'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             </div>
             <div class="form-group" style="flex:2;">
-              <label for="last_name">Apellido *</label>
+              <label for="last_name">Last Name *</label>
               <input class="form-control" type="text" id="last_name" name="last_name" required value="<?= htmlspecialchars((string)$lead['last_name'], ENT_QUOTES, 'UTF-8') ?>">
             </div>
           </div>
 
           <div class="row">
             <div class="form-group" style="flex:2;">
-              <label for="phone"><i class="fas fa-phone"></i> Teléfono</label>
+              <label for="phone"><i class="fas fa-phone"></i> Phone</label>
               <input class="form-control" type="text" id="phone" name="phone" value="<?= htmlspecialchars((string)$lead['phone'], ENT_QUOTES, 'UTF-8') ?>">
             </div>
             <div class="form-group" style="flex:3;">
@@ -296,27 +302,27 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
               <input class="form-control" type="email" id="email" name="email" value="<?= htmlspecialchars((string)($lead['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             </div>
             <div class="form-group" style="flex:1;">
-              <label for="age"><i class="fas fa-user"></i> Edad</label>
+              <label for="age"><i class="fas fa-user"></i> Age</label>
               <input class="form-control" type="number" id="age" name="age" value="<?= htmlspecialchars((string)($lead['age'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             </div>
           </div>
 
           <div class="form-group">
-            <label for="address_line"><i class="fas fa-map-marker-alt"></i> Dirección</label>
+            <label for="address_line"><i class="fas fa-map-marker-alt"></i> Address</label>
             <input class="form-control" type="text" id="address_line" name="address_line" value="<?= htmlspecialchars((string)($lead['address_line'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
           </div>
 
           <div class="row">
             <div class="form-group" style="flex:1;">
-              <label for="suite_apt">Apto/Suite</label>
+              <label for="suite_apt">Apt/Suite</label>
               <input class="form-control" type="text" id="suite_apt" name="suite_apt" value="<?= htmlspecialchars((string)($lead['suite_apt'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             </div>
             <div class="form-group" style="flex:2;">
-              <label for="city">Ciudad</label>
+              <label for="city">City</label>
               <input class="form-control" type="text" id="city" name="city" value="<?= htmlspecialchars((string)($lead['city'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             </div>
             <div class="form-group" style="flex:1;">
-              <label for="state">Estado (2)</label>
+              <label for="state">State (2)</label>
               <input class="form-control" type="text" id="state" name="state" maxlength="2" value="<?= htmlspecialchars((string)($lead['state'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
             </div>
             <div class="form-group" style="flex:1;">
@@ -331,7 +337,7 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
 
           <div class="row">
             <div class="form-group" style="flex:1;">
-              <label for="insurance_interest_id">Interés</label>
+              <label for="insurance_interest_id">Interest</label>
               <select class="form-control" id="insurance_interest_id" name="insurance_interest_id">
                 <option value="">—</option>
                 <?php foreach ($interests as $i): ?>
@@ -342,7 +348,7 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
               </select>
             </div>
             <div class="form-group" style="flex:1;">
-              <label for="source_id">Fuente</label>
+              <label for="source_id">Source</label>
               <select class="form-control" id="source_id" name="source_id">
                 <?php foreach ($sources as $s): ?>
                   <option value="<?= (int)$s['id'] ?>" <?= ((int)$lead['source_id'] === (int)$s['id']) ? 'selected' : '' ?>>
@@ -352,7 +358,7 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
               </select>
             </div>
             <div class="form-group" style="flex:1;">
-              <label for="income">Ingreso</label>
+              <label for="income">Income</label>
               <select class="form-control" id="income" name="income">
                 <option value="">—</option>
                 <?php foreach ($incomes as $i): ?>
@@ -363,7 +369,7 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
               </select>
             </div>
             <div class="form-group" style="flex:1;">
-              <label for="language">Idioma</label>
+              <label for="language">Language</label>
               <select class="form-control" id="language" name="language">
                 <option value="">—</option>
                 <?php foreach ($languages as $l): ?>
@@ -376,27 +382,32 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
           </div>
 
           <div class="form-group">
-            <label for="notes"><i class="fas fa-sticky-note"></i> Notas</label>
+            <label for="notes"><i class="fas fa-sticky-note"></i> Notes</label>
             <textarea class="form-control" id="notes" name="notes" rows="4"><?= htmlspecialchars((string)($lead['notes'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
           </div>
 
           <div class="form-group">
             <label>
               <input type="checkbox" name="do_not_call" value="1" <?= ((int)$lead['do_not_call'] === 1) ? 'checked' : '' ?>>
-              <strong>No llamar (DNC)</strong>
+              <strong>Do Not Call (DNC)</strong>
             </label>
           </div>
 
           <button type="submit" class="btn" <?= $isLockedByOther ? 'disabled' : '' ?>>
-            <i class="fas fa-save"></i> Guardar cambios
+            <i class="fas fa-save"></i> Save Changes
           </button>
-          <a class="btn btn-secondary" href="list.php"><i class="fas fa-arrow-left"></i> Volver</a>
+          <?php if (!$isLockedByOther): ?>
+            <button type="button" class="btn btn-danger" onclick="confirmDelete()">
+              <i class="fas fa-trash"></i> Delete Lead
+            </button>
+          <?php endif; ?>
+          <a class="btn btn-secondary" href="list.php"><i class="fas fa-arrow-left"></i> Back</a>
         </form>
       </div>
 
-      <!-- Columna derecha: Documentos -->
+      <!-- Right column: Documents -->
       <div class="card">
-        <h2><i class="fas fa-paperclip"></i> Documentos del Lead</h2>
+        <h2><i class="fas fa-paperclip"></i> Lead Documents</h2>
 
         <?php if ($uploadMessage): ?>
           <div class="alert <?= $uploadMessage['type']==='success' ? 'alert-success' : 'alert-error' ?>">
@@ -405,7 +416,7 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
         <?php endif; ?>
 
         <?php if (!$docs): ?>
-          <p class="muted">No hay documentos aún.</p>
+          <p class="muted">No documents yet.</p>
         <?php else: ?>
           <ul style="list-style:none;padding:0;margin:0;">
             <?php foreach ($docs as $d): ?>
@@ -416,7 +427,7 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
                   <?= htmlspecialchars((string)$d['uploaded_at'], ENT_QUOTES, 'UTF-8') ?>
                 </div>
                 <div style="margin-top:6px;">
-                  <a class="btn" href="/download.php?id=<?= (int)$d['id'] ?>"><i class="fa-solid fa-download"></i> Descargar</a>
+                  <a class="btn" href="/download.php?id=<?= (int)$d['id'] ?>"><i class="fa-solid fa-download"></i> Download</a>
                 </div>
               </li>
             <?php endforeach; ?>
@@ -424,30 +435,55 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
         <?php endif; ?>
 
         <hr style="margin:14px 0; border:none; border-top:1px solid #eee;">
-        <h3>Subir nuevo documento</h3>
+        <h3>Upload New Document</h3>
         <form method="post" enctype="multipart/form-data" autocomplete="off">
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
           <input type="hidden" name="__action" value="upload_doc">
 
           <div class="form-group">
-            <label for="title"><i class="fa-regular fa-rectangle-list"></i> Título</label>
+            <label for="title"><i class="fa-regular fa-rectangle-list"></i> Title</label>
             <input class="form-control" type="text" id="title" name="title" maxlength="255" required>
           </div>
 
           <div class="form-group">
-            <label for="file"><i class="fa-regular fa-file"></i> Archivo</label>
+            <label for="file"><i class="fa-regular fa-file"></i> File</label>
             <input class="form-control" type="file" id="file" name="file" required>
-            <small style="color:#6b7280;">Permitidos: PDF, PNG, JPG, DOCX, XLSX. Máx: 10MB.</small>
+            <small style="color:#6b7280;">Allowed: PDF, PNG, JPG, DOCX, XLSX. Max: 10MB.</small>
           </div>
 
-          <button type="submit" class="btn"><i class="fa-solid fa-upload"></i> Subir</button>
+          <button type="submit" class="btn"><i class="fa-solid fa-upload"></i> Upload</button>
         </form>
       </div>
     </div>
 
     <p style="margin-top:14px;">
-      <a class="btn btn-secondary" href="list.php"><i class="fas fa-arrow-left"></i> Volver a la lista</a>
+      <a class="btn btn-secondary" href="list.php"><i class="fas fa-arrow-left"></i> Back to List</a>
     </p>
   </div>
+
+  <script>
+  function confirmDelete() {
+    if (confirm('Are you sure you want to delete this lead? This action cannot be undone.')) {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.style.display = 'none';
+
+      const csrf = document.createElement('input');
+      csrf.type = 'hidden';
+      csrf.name = 'csrf_token';
+      csrf.value = '<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>';
+      form.appendChild(csrf);
+
+      const action = document.createElement('input');
+      action.type = 'hidden';
+      action.name = '__action';
+      action.value = 'delete_lead';
+      form.appendChild(action);
+
+      document.body.appendChild(form);
+      form.submit();
+    }
+  }
+  </script>
 </body>
 </html>

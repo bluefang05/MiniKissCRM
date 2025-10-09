@@ -5,18 +5,17 @@ require_once __DIR__ . '/db.php';
 class Lead
 {
     /**
-     * Recupera todos los leads junto con su estatus, fuente e interés.
+     * Recupera todos los leads junto con su fuente e interés.
+     * Nota: El sistema NO usa status_id en la tabla leads.
      */
     public static function all(): array
     {
         return getPDO()->query("
             SELECT 
                 l.*, 
-                s.name   AS status, 
                 so.name  AS source,
                 ii.name  AS interest
             FROM leads l
-            LEFT JOIN lead_statuses      s  ON l.status_id              = s.id
             LEFT JOIN lead_sources       so ON l.source_id              = so.id
             LEFT JOIN insurance_interests ii ON l.insurance_interest_id = ii.id
             ORDER BY l.created_at DESC
@@ -39,26 +38,47 @@ class Lead
      */
     public static function create(array $data): int
     {
+        // Lista de columnas reales en la tabla `leads` (sin `status_id`)
         $fields = [
-            'external_id','prefix','first_name','mi','last_name',
-            'phone','email','address_line','suite_apt','city',
-            'state','zip5','zip4','delivery_point_bar_code',
-            'carrier_route','fips_county_code','county_name','age',
+            'external_id',
+            'prefix',
+            'first_name',
+            'mi',
+            'last_name',
+            'phone',
+            'email',
+            'address_line',
+            'suite_apt',
+            'city',
+            'state',
+            'zip5',
+            'zip4',
+            'delivery_point_bar_code',
+            'carrier_route',
+            'fips_county_code',
+            'county_name',
+            'age',
             'insurance_interest_id',
-            // --- agregados para que Import funcione correctamente:
-            'language','income',
-            // -----------------------------------------------
-            'source_id','status_id',
-            'do_not_call','taken_by','taken_at'
+            'source_id',
+            'do_not_call',
+            'taken_by',
+            'taken_at',
+            'income',
+            'language',
+            'notes',
+            'uploaded_by'
         ];
+
         $placeholders = array_map(fn($f) => ":$f", $fields);
         $sql = "INSERT INTO leads (" . implode(',', $fields) . ")
                 VALUES (" . implode(',', $placeholders) . ")";
+
         $stmt = getPDO()->prepare($sql);
         foreach ($fields as $f) {
             $stmt->bindValue(":$f", $data[$f] ?? null);
         }
         $stmt->execute();
+
         return (int)getPDO()->lastInsertId();
     }
 
