@@ -1,0 +1,34 @@
+name: Simple Deploy (Dev)
+
+on:
+  push:
+    branches: [ main ] 
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SERVER_IP: 164.90.134.156       
+          USER: root                   
+          APP_PATH: /var/www/insurex     
+          SERVICE: insurex       
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          printf "Host *\n  StrictHostKeyChecking no\n" > ~/.ssh/config
+
+          sudo apt-get update -y && sudo apt-get install -y rsync
+
+          rsync -az --delete -e "ssh -i ~/.ssh/id_ed25519" ./ "$USER@$SERVER_IP:$APP_PATH"
+
+          if [ -n "$SERVICE" ]; then
+            ssh -i ~/.ssh/id_ed25519 "$USER@$SERVER_IP" "systemctl restart $SERVICE || true"
+          fi
+
+          echo "Deploy step finished"
