@@ -39,6 +39,9 @@ $sources = $pdo->query("
   ORDER BY name
 ")->fetchAll(PDO::FETCH_ASSOC);
 
+// Fallback (primer source activo) para respetar NOT NULL en leads.source_id
+$fallbackSourceId = (int)($pdo->query("SELECT id FROM lead_sources WHERE active=1 ORDER BY id LIMIT 1")->fetchColumn() ?: 0);
+
 //---------------------------------------------------
 // Insurance interests
 //---------------------------------------------------
@@ -99,12 +102,9 @@ if (isset($_GET['cancel']) && !empty($_SESSION['import_temp'])) {
 //---------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'detect_columns') {
     try {
-        if (empty($_POST['source_id'])) {
-            throw new Exception('You must select a lead source.');
-        }
-        if (empty($_POST['default_interest_id'])) {
-            throw new Exception('You must select a default interest.');
-        }
+        // AHORA OPCIONALES: source_id y default_interest_id (no lanzamos error)
+        $chosenSourceId = (isset($_POST['source_id']) && $_POST['source_id'] !== '') ? (int)$_POST['source_id'] : null;
+        $chosenDefaultInterestId = (isset($_POST['default_interest_id']) && $_POST['default_interest_id'] !== '') ? (int)$_POST['default_interest_id'] : null;
 
         // Handle file
         if (!empty($_POST['csv_data'])) {
@@ -177,8 +177,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'detec
             'file_path' => $tmpPath,
             'filename' => $filename,
             'header' => $header,
-            'source_id' => (int)$_POST['source_id'],
-            'default_interest_id' => (int)$_POST['default_interest_id'],
+            'source_id' => $chosenSourceId,                 // puede ser null
+            'default_interest_id' => $chosenDefaultInterestId, // puede ser null
             'from_excel' => $fromExcel,
             'suggested_mapping' => $suggestedMapping,
         ];
@@ -202,8 +202,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         $temp = $_SESSION['import_temp'];
         $tmpPath = $temp['file_path'];
         $header = $temp['header'];
-        $sourceId = $temp['source_id'];
-        $defaultInterestId = $temp['default_interest_id'];
+        $sourceId = $temp['source_id'] ?? null; // opcional
+        $defaultInterestId = $temp['default_interest_id'] ?? null; // opcional
 
         // Build mapping from POST
         $columnMapping = [];
@@ -248,9 +248,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             if (!empty($data['phone'])) {
                 $data['phone'] = preg_replace('/\D+/', '', $data['phone']);
             }
-            $data['insurance_interest_id'] = !empty($data['interest']) 
-                ? ($interestMap[strtolower(trim($data['interest']))] ?? $defaultInterestId)
-                : $defaultInterestId;
+
+            // interest: del CSV o default; si nada, queda NULL
+            $interestFromCsv = !empty($data['interest']) ? ($interestMap[strtolower(trim($data['interest']))] ?? null) : null;
+            $data['insurance_interest_id'] = $interestFromCsv ?? $defaultInterestId ?? null;
+
             $data['language'] = !empty($data['language']) ? trim($data['language']) : null;
             $data['income'] = !empty($data['income']) ? strtoupper(substr(trim($data['income']), 0, 1)) : null;
 
@@ -263,7 +265,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             $data['external_id'] = $ext;
 
             // Fixed fields
-            $data['source_id'] = $sourceId;
+            // source_id obligatorio por esquema: usa el elegido; si no hay, usa fallback
+            $data['source_id'] = $sourceId ?: $fallbackSourceId;
             $data['do_not_call'] = 0;
             $data['uploaded_by'] = $user['id'];
 
@@ -295,10 +298,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         $pdo->commit();
 
         // Audit
+        $srcForLog = ($sourceId ?? 'NULL');
+        $defIntForLog = ($defaultInterestId ?? 'NULL');
         AuditLog::log(
             $user['id'],
             'import_leads',
-            "file={$temp['filename']} src=$sourceId default_interest=$defaultInterestId created=$created updated=$updated skipped=$skipped"
+            "file={$temp['filename']} src={$srcForLog} default_interest={$defIntForLog} created={$created} updated={$updated} skipped={$skipped}"
         );
 
         $summary = compact('created', 'updated', 'skipped');
@@ -321,60 +326,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="../assets/js/spreadsheet-importer.js"></script>
   <style>
-    .step-indicator {
-      display: flex;
-      margin-bottom: 20px;
-      font-weight: 500;
-    }
+    .step-indicator { display: flex; margin-bottom: 20px; font-weight: 500; }
     .step { padding: 8px 16px; }
     .step.active { background: #0d6efd; color: white; }
     .step.completed { background: #198754; color: white; }
     .step.pending { background: #e9ecef; color: #6c757d; }
-    .mapping-container {
-      max-width: 1000px;
-      margin: 0 auto;
-    }
-    .mapping-row {
-      display: grid;
-      grid-template-columns: 250px 50px 1fr;
-      gap: 15px;
-      align-items: center;
-      margin-bottom: 15px;
-      padding: 12px;
-      background: #f8f9fa;
-      border-radius: 6px;
-      border: 1px solid #e9ecef;
-    }
-    .mapping-row.required {
-      background: #fff3cd;
-      border-color: #ffeaa7;
-    }
-    .system-field {
-      font-weight: 600;
-    }
-    .system-field.required::after {
-      content: " *";
-      color: #dc3545;
-    }
-    .arrow {
-      text-align: center;
-      color: #6c757d;
-      font-size: 20px;
-    }
-    .column-select {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid #ced4da;
-      border-radius: 6px;
-      font-size: 14px;
-    }
-    .preview-box {
-      background: #f1f3f5;
-      padding: 16px;
-      border-radius: 8px;
-      margin-bottom: 24px;
-      border-left: 4px solid #0d6efd;
-    }
+    .mapping-container { max-width: 1000px; margin: 0 auto; }
+    .mapping-row { display: grid; grid-template-columns: 250px 50px 1fr; gap: 15px; align-items: center; margin-bottom: 15px; padding: 12px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef; }
+    .mapping-row.required { background: #fff3cd; border-color: #ffeaa7; }
+    .system-field { font-weight: 600; }
+    .system-field.required::after { content: " *"; color: #dc3545; }
+    .arrow { text-align: center; color: #6c757d; font-size: 20px; }
+    .column-select { width: 100%; padding: 8px 12px; border: 1px solid #ced4da; border-radius: 6px; font-size: 14px; }
+    .preview-box { background: #f1f3f5; padding: 16px; border-radius: 8px; margin-bottom: 24px; border-left: 4px solid #0d6efd; }
     .btn { padding: 8px 16px; margin-right: 8px; text-decoration: none; display: inline-block; }
     .btn-secondary { background: #6c757d; color: white; }
   </style>
@@ -402,13 +366,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     </div>
 
     <?php if ($error): ?>
-      <div class="error summary" style="padding:12px;background:#f8d7da;color:#721c24;border:1px solid #f5c6cb;border-radius:6px;margin:15px 0;">
+      <div class="error summary" style="padding:12px;background:#f8d7da;color:#721c24;border:1px solid:#f5c6cb;border-radius:6px;margin:15px 0;">
         <?= htmlspecialchars($error) ?>
       </div>
     <?php endif; ?>
 
     <?php if ($summary): ?>
-      <div class="summary" style="padding:12px;background:#d1e7dd;color:#0f5132;border:1px solid #badbcc;border-radius:6px;margin:15px 0;">
+      <div class="summary" style="padding:12px;background:#d1e7dd;color:#0f5132;border:1px solid:#badbcc;border-radius:6px;margin:15px 0;">
         <strong>Import completed successfully!</strong><br>
         New: <?= $summary['created'] ?> | Updated: <?= $summary['updated'] ?> | Skipped: <?= $summary['skipped'] ?>
       </div>
@@ -419,30 +383,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     <?php endif; ?>
 
     <?php if ($step === 1 && !$summary): ?>
-      <p>Upload your CSV or Excel file with any column format. We'll help you map columns to our system.</p>
+      <p>Upload your CSV or Excel file. <strong>Lead Source</strong> y <strong>Default Interest</strong> son opcionales; si no eliges Source usaremos el primer source activo.</p>
       <form id="importForm" method="post" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
         <input type="hidden" name="action" value="detect_columns">
         <textarea id="csv_data" name="csv_data" style="display:none;"></textarea>
 
         <div class="form-group" style="margin-bottom:16px;">
-          <label for="source_id">Lead Source</label>
-          <select id="source_id" name="source_id" class="column-select" required>
-            <option value="">— Select a source —</option>
+          <label for="source_id">Lead Source (optional)</label>
+          <select id="source_id" name="source_id" class="column-select">
+            <option value="">— None —</option>
             <?php foreach ($sources as $s): ?>
               <option value="<?= $s['id'] ?>"><?= htmlspecialchars($s['name']) ?></option>
             <?php endforeach; ?>
           </select>
+          <small style="color:#6c757d;">Si lo dejas vacío, se usará el primer source activo (ID <?= (int)$fallbackSourceId ?>).</small>
         </div>
 
         <div class="form-group" style="margin-bottom:16px;">
-          <label for="default_interest_id">Default Interest</label>
-          <select id="default_interest_id" name="default_interest_id" class="column-select" required>
-            <option value="">— Select a default interest —</option>
+          <label for="default_interest_id">Default Interest (optional)</label>
+          <select id="default_interest_id" name="default_interest_id" class="column-select">
+            <option value="">— None —</option>
             <?php foreach ($interestRows as $i): ?>
               <option value="<?= $i['id'] ?>"><?= htmlspecialchars($i['name']) ?></option>
             <?php endforeach; ?>
           </select>
+          <small style="color:#6c757d;">Si lo dejas vacío y el CSV no trae una columna "interest", el lead quedará sin interés asignado.</small>
         </div>
 
         <div class="form-group" style="margin-bottom:16px;">
@@ -496,7 +462,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       </form>
     <?php endif; ?>
 
-    <!-- ✨ Botón "Back to List" agregado aquí ✨ -->
     <p style="margin-top: 24px; text-align: center;">
       <a class="btn btn-secondary" href="list.php">
         <i class="fas fa-arrow-left"></i> Back to List

@@ -9,20 +9,18 @@ if (!Auth::check() || !in_array('admin', Auth::user()['roles'] ?? [])) {
 
 $pdo = getPDO();
 
-// Handle Filters
+// ---- filtros ----
 $filters = [];
-$params = [];
+$params  = [];
 
 if (!empty($_GET['lead_name'])) {
     $like = '%' . $_GET['lead_name'] . '%';
     $filters[] = "(l.first_name LIKE ? OR l.last_name LIKE ?)";
-    $params[] = $like;
-    $params[] = $like;
+    $params[] = $like; $params[] = $like;
 }
 if (!empty($_GET['title'])) {
-    $like = '%' . $_GET['title'] . '%';
     $filters[] = "d.title LIKE ?";
-    $params[] = $like;
+    $params[] = '%' . $_GET['title'] . '%';
 }
 if (!empty($_GET['file_type'])) {
     $filters[] = "d.file_type = ?";
@@ -37,9 +35,8 @@ if (!empty($_GET['date_to'])) {
     $params[] = $_GET['date_to'];
 }
 
-$where = count($filters) ? 'WHERE ' . implode(' AND ', $filters) : '';
+$where = $filters ? 'WHERE ' . implode(' AND ', $filters) : '';
 
-// Fetch all documents + lead info with filters
 $stmt = $pdo->prepare("
   SELECT d.id, d.title, d.file_name, d.file_type, d.uploaded_at,
          d.file_path, l.first_name, l.last_name
@@ -50,33 +47,26 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute($params);
 $docs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/**
+ * Corrige la ruta de los archivos para salir del directorio /admin
+ * y evitar el problema de admin/uploads/... apareciendo en el enlace.
+ */
+function doc_href(string $fp): string {
+    $rel = preg_replace('#^(\.\./|/)+#', '', $fp); // elimina prefijos ../ o /
+    return '../' . $rel; // sube un nivel desde /admin/
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Admin: Documents</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css ">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="../assets/css/admin/documents.css">
   <style>
-    .btn[title] {
-      position: relative;
-    }
-    .btn[title]:hover::after {
-      content: attr(title);
-      position: absolute;
-      bottom: 100%;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #333;
-      color: #fff;
-      padding: 4px 8px;
-      border-radius: 4px;
-      white-space: nowrap;
-      font-size: 0.75rem;
-      z-index: 10;
-      white-space: nowrap;
-    }
+    .btn[title]{position:relative}
+    .btn[title]:hover::after{content:attr(title);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:4px 8px;border-radius:4px;font-size:.75rem;white-space:nowrap;z-index:10}
   </style>
 </head>
 <body>
@@ -107,11 +97,11 @@ $docs = $stmt->fetchAll(PDO::FETCH_ASSOC);
           <label>File Type</label>
           <select name="file_type" class="form-control">
             <option value="">All Types</option>
-            <option value="application/pdf" <?= ($_GET['file_type'] ?? '') == 'application/pdf' ? 'selected' : '' ?>>PDF</option>
-            <option value="image/jpeg" <?= ($_GET['file_type'] ?? '') == 'image/jpeg' ? 'selected' : '' ?>>JPEG</option>
-            <option value="image/png" <?= ($_GET['file_type'] ?? '') == 'image/png' ? 'selected' : '' ?>>PNG</option>
-            <option value="application/msword" <?= ($_GET['file_type'] ?? '') == 'application/msword' ? 'selected' : '' ?>>DOC</option>
-            <option value="application/vnd.openxmlformats-officedocument.wordprocessingml.document" <?= ($_GET['file_type'] ?? '') == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ? 'selected' : '' ?>>DOCX</option>
+            <option value="application/pdf" <?= ($_GET['file_type'] ?? '')=='application/pdf'?'selected':'' ?>>PDF</option>
+            <option value="image/jpeg" <?= ($_GET['file_type'] ?? '')=='image/jpeg'?'selected':'' ?>>JPEG</option>
+            <option value="image/png" <?= ($_GET['file_type'] ?? '')=='image/png'?'selected':'' ?>>PNG</option>
+            <option value="application/vnd.openxmlformats-officedocument.wordprocessingml.document" <?= ($_GET['file_type'] ?? '')=='application/vnd.openxmlformats-officedocument.wordprocessingml.document'?'selected':'' ?>>DOCX</option>
+            <option value="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" <?= ($_GET['file_type'] ?? '')=='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'?'selected':'' ?>>XLSX</option>
           </select>
         </div>
         <div class="form-group col-md-2">
@@ -147,40 +137,39 @@ $docs = $stmt->fetchAll(PDO::FETCH_ASSOC);
           <tr><td colspan="7" style="text-align:center">No documents found.</td></tr>
         <?php else: foreach ($docs as $d): ?>
           <tr>
-            <td><?= $d['id'] ?></td>
+            <td><?= (int)$d['id'] ?></td>
             <td><?= htmlspecialchars($d['first_name'].' '.$d['last_name']) ?></td>
             <td><?= htmlspecialchars($d['title']) ?></td>
             <td>
-              <a href="<?= '../uploads/lead_documents/'.basename($d['file_path']) ?>"
-                 target="_blank"><?= htmlspecialchars($d['file_name']) ?></a>
+              <a href="<?= htmlspecialchars(doc_href($d['file_path']), ENT_QUOTES, 'UTF-8') ?>" target="_blank">
+                <?= htmlspecialchars($d['file_name']) ?>
+              </a>
             </td>
             <td><?= htmlspecialchars($d['file_type']) ?></td>
             <td><?= htmlspecialchars($d['uploaded_at']) ?></td>
             <td>
-              <!-- Download Button -->
-              <a class="btn btn-sm btn-outline-secondary" 
-                 href="<?= '../uploads/lead_documents/' . basename($d['file_path']) ?>" 
-                 download 
+              <!-- Download -->
+              <a class="btn btn-sm btn-outline-secondary"
+                 href="<?= htmlspecialchars(doc_href($d['file_path']), ENT_QUOTES, 'UTF-8') ?>"
+                 download
                  title="Download File">
                  <i class="fas fa-download"></i>
               </a>
 
-              <!-- Rename Button -->
-              <a class="btn btn-sm btn-outline-secondary" 
-                 href="document_edit.php?id=<?= $d['id'] ?>" 
+              <!-- Rename -->
+              <a class="btn btn-sm btn-outline-secondary"
+                 href="document_edit.php?id=<?= (int)$d['id'] ?>"
                  title="Rename Document">
                  <i class="fas fa-edit"></i>
               </a>
 
-              <!-- Delete Button -->
-              <form method="post" 
-                    action="document_delete.php" 
-                    style="display:inline" 
+              <!-- Delete -->
+              <form method="post"
+                    action="document_delete.php"
+                    style="display:inline"
                     onsubmit="return confirm('Delete “<?= htmlspecialchars($d['title']) ?>”?');">
-                <input type="hidden" name="id" value="<?= $d['id'] ?>">
-                <button type="submit" 
-                        class="btn btn-sm btn-danger" 
-                        title="Delete Document">
+                <input type="hidden" name="id" value="<?= (int)$d['id'] ?>">
+                <button type="submit" class="btn btn-sm btn-danger" title="Delete Document">
                     <i class="fas fa-trash"></i>
                 </button>
               </form>

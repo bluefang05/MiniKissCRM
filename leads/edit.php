@@ -14,6 +14,13 @@ if (!Auth::check()) {
 $user = Auth::user();
 $pdo  = getPDO();
 
+// -------- Helper para URLs de archivos (sube desde /leads a la raíz del proyecto) --------
+function file_href(string $fp): string {
+    // elimina prefijos peligrosos o redundantes (../ o /)
+    $rel = preg_replace('#^(\.\./|/)+#', '', $fp);
+    return '../' . $rel; // desde /leads/* hacia /uploads/...
+}
+
 // -------- CSRF Helpers --------
 if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -109,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($first_name === '' || $last_name === '') $errors[] = 'First and last name are required.';
     if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Invalid email.';
     if ($state !== '' && strlen($state) !== 2) $errors[] = 'State must be 2 letters.';
-    if ($zip5 !== '' && strlen($zip5) !== 5) $errors[] = 'ZIP5 must be 5 digits.';
+    if ($zip5 !== '' && strlen($zip5) !== 5) $errors[] = 'ZIP5 must be 5 digits';
 
     if ($errors) {
       $flash = ['type' => 'error', 'text' => implode(' ', $errors)];
@@ -175,14 +182,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $uploadMessage = ['type' => 'error', 'text' => 'File type not allowed.'];
         } else {
           $storedName = uuidv4() . '.' . $ext;
-          $storageDir = __DIR__ . '/../storage/lead_documents/';
-          if (!is_dir($storageDir) && !mkdir($storageDir, 0775, true) && !is_dir($storageDir)) {
-            $uploadMessage = ['type' => 'error', 'text' => 'Could not create storage folder.'];
+          $uploadDir = __DIR__ . '/../uploads/lead_documents/';
+          if (!is_dir($uploadDir) && !mkdir($uploadDir, 0775, true) && !is_dir($uploadDir)) {
+            $uploadMessage = ['type' => 'error', 'text' => 'Could not create uploads folder.'];
           } else {
-            $destPath = $storageDir . $storedName;
+            $destPath = $uploadDir . $storedName;
             if (!move_uploaded_file($file['tmp_name'], $destPath)) {
               $uploadMessage = ['type' => 'error', 'text' => 'Could not save the file.'];
             } else {
+              // Guardamos RUTA RELATIVA SIN BARRA INICIAL
+              $relativePath = 'uploads/lead_documents/' . $storedName;
+
               $ins = $pdo->prepare("
                 INSERT INTO lead_documents (lead_id, title, file_name, file_path, file_type, uploaded_by)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -190,8 +200,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               $ins->execute([
                 $leadId,
                 mb_substr($title, 0, 255),
-                $storedName,
-                'storage/lead_documents/',
+                $file['name'],
+                $relativePath,
                 $mime,
                 (int)$user['id'],
               ]);
@@ -214,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // -------- Lead documents --------
 $docsStmt = $pdo->prepare("
-  SELECT id, title, file_name, file_type, uploaded_at
+  SELECT id, title, file_name, file_path, file_type, uploaded_at
   FROM lead_documents
   WHERE lead_id = ?
   ORDER BY uploaded_at DESC
@@ -427,7 +437,9 @@ $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC);
                   <?= htmlspecialchars((string)$d['uploaded_at'], ENT_QUOTES, 'UTF-8') ?>
                 </div>
                 <div style="margin-top:6px;">
-                  <a class="btn" href="/download.php?id=<?= (int)$d['id'] ?>"><i class="fa-solid fa-download"></i> Download</a>
+                  <a class="btn" href="<?= htmlspecialchars(file_href($d['file_path']), ENT_QUOTES, 'UTF-8') ?>" target="_blank">
+                    <i class="fa-solid fa-download"></i> Download
+                  </a>
                 </div>
               </li>
             <?php endforeach; ?>
