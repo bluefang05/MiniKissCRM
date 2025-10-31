@@ -1,0 +1,5 @@
+"/vendor\n.env\n/uploads\n*.log" 
+/.git_corrupt/
+/uploads/lead_documents/
+/uploads/*
+*.log

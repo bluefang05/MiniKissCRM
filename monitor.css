@@ -1,0 +1,162 @@
+:root {
+  --bg:#0b1020;
+  --card:#121936;
+  --fg:#e9ecf1;
+  --muted:#9aa5c4;
+  --acc:#6ea8fe;
+  --line:#1e2a4d;
+  --chip:#2c3a6a;
+  --chip-fg:#cfe1ff;
+  --ok:#4ade80;
+  --info:#60a5fa;
+  --warn:#fbbf24;
+  --err:#f87171;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial;
+}
+
+.wrap { max-width: 1200px; margin: 20px auto; padding: 0 16px; }
+.grid { display: grid; gap: 16px; }
+.kpis { grid-template-columns: repeat(4, 1fr); }
+
+.card {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+
+.card h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: .2px;
+}
+
+.big { font-size: 28px; font-weight: 700; }
+.muted { color: var(--muted); }
+
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+input, select, button {
+  background: #0f1533;
+  color: var(--fg);
+  border: 1px solid #243059;
+  border-radius: 8px;
+  padding: 8px 10px;
+  outline: none;
+}
+input:focus, select:focus, button:focus {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 2px rgba(110,168,254,.25);
+}
+
+button { cursor: pointer; transition: transform .12s ease, box-shadow .12s ease; }
+button:hover { transform: translateY(-1px); }
+button:active { transform: translateY(0); }
+
+a { color: var(--acc); text-decoration: none; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+th { color: #b9c4e6; text-align: left; font-size: 12px; letter-spacing: .3px; }
+
+.badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--chip);
+  color: var(--chip-fg);
+}
+
+.split { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+@media (max-width:1024px){
+  .kpis { grid-template-columns: repeat(2,1fr); }
+  .split { grid-template-columns: 1fr; }
+}
+
+/* Chart sizing */
+#chartWrap { height: 260px; }
+
+/* Range buttons (Today / 7d / 30d) */
+.range-group { display: flex; gap: 8px; }
+.range-btn {
+  background: #0f1533;
+  color: var(--fg);
+  border: 1px solid #243059;
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+.range-btn.is-active {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 2px rgba(110,168,254,.25) inset;
+  font-weight: 600;
+}
+
+/* Apply button + pending animation */
+.btn-apply {
+  background: #0f1533;
+  border: 1px solid #243059;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.btn-apply.pending {
+  animation: pulseScale 1.2s ease-in-out infinite;
+  border-color: var(--acc);
+  box-shadow: 0 0 0 4px rgba(110,168,254,.12);
+}
+@keyframes pulseScale {
+  0%   { transform: scale(1);   box-shadow: 0 0 0 0 rgba(110,168,254,.18); }
+  50%  { transform: scale(1.035); box-shadow: 0 0 0 6px rgba(110,168,254,.10); }
+  100% { transform: scale(1);   box-shadow: 0 0 0 0 rgba(110,168,254,.18); }
+}
+
+/* Pagination styles (for future / optional server-side paging) */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 10px;
+}
+.pager-btn {
+  background: #0f1533;
+  color: var(--fg);
+  border: 1px solid #243059;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.pager-btn:hover { transform: translateY(-1px); }
+.pager-btn.is-disabled,
+.pager-btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  transform: none;
+}
+.pager-count { color: var(--muted); font-size: 12px; }
+
+/* Utility chips (if you add filter chips later) */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--chip);
+  color: var(--chip-fg);
+  font-size: 12px;
+}
+
+/* Small grid helpers if needed later */
+.grid-2 { display:grid; grid-template-columns: repeat(2,1fr); gap: 12px; }
+.grid-3 { display:grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+.grid-4 { display:grid; grid-template-columns: repeat(4,1fr); gap: 12px; }

@@ -1,0 +1,284 @@
+/* ─────────────  Cold‑Call Dashboard  –  CSS 100 % listo  ───────────── */
+
+:root{
+  /* brand + semantic */
+  --primary:#1a365d;  --primary-light:#2d5a87;  --secondary:#319795;
+  --success:#38a169;  --warning:#d69e2e;  --danger:#e53e3e;  --info:#3182ce;
+  /* gray scale */
+  --gray-50:#f9fafb;  --gray-100:#f3f4f6;  --gray-200:#e5e7eb;
+  --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280;
+  --gray-600:#4b5563; --gray-700:#374151; --gray-800:#1f2937; --gray-900:#111827;
+  /* shadows */
+  --shadow-sm:0 1px 2px rgba(0,0,0,.05);
+  --shadow:0 1px 3px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.06);
+  --shadow-md:0 4px 6px -1px rgba(0,0,0,.1),0 2px 4px -1px rgba(0,0,0,.06);
+  --shadow-lg:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -2px rgba(0,0,0,.05);
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+/* Fondo general */
+html{
+  background:linear-gradient(135deg,var(--gray-50) 0%,var(--gray-100) 100%);
+  background-attachment:fixed;
+}
+
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  color:var(--gray-800);
+  line-height:1.6;
+  min-height:100vh;           /* único min‑height */
+}
+
+/* ────── Contenedor principal ────── */
+.dashboard-container{
+  max-width:1400px;
+  margin:0 auto;
+  padding:2rem;
+}
+
+/* ────── Header ────── */
+.header{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:2rem;background:#fff;padding:1.5rem 2rem;
+  border-radius:12px;box-shadow:var(--shadow);
+}
+.header h1{font-size:2rem;font-weight:700;color:var(--primary)}
+.header-actions{display:flex;align-items:center;gap:1rem}
+
+.btn{
+  display:inline-flex;align-items:center;gap:.5rem;padding:.75rem 1.5rem;
+  border-radius:8px;font-weight:500;font-size:.875rem;text-decoration:none;
+  border:none;cursor:pointer;transition:.2s
+}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-light);transform:translateY(-1px);box-shadow:var(--shadow-md)}
+.btn-secondary{background:var(--gray-100);color:var(--gray-700)}
+.btn-secondary:hover{background:var(--gray-200)}
+.btn-sm{padding:.5rem 1rem;font-size:.8rem}
+.mb-3{margin-bottom:1rem}
+
+.online-indicator{
+  display:inline-flex;align-items:center;gap:.5rem;background:var(--success);
+  color:#fff;padding:.5rem 1rem;border-radius:20px;font-size:.875rem;font-weight:500
+}
+.online-dot{width:8px;height:8px;background:#fff;border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* ────── KPI Cards ────── */
+.kpi-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:1.5rem;margin-bottom:2rem
+}
+.kpi-card{
+  position:relative;overflow:hidden;
+  background:#fff;padding:2rem;border-radius:12px;box-shadow:var(--shadow);
+  transition:.3s;border-left:4px solid var(--primary);
+}
+.kpi-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px)}
+.kpi-card::before{
+  content:'';position:absolute;top:0;right:0;width:100px;height:100px;
+  background:linear-gradient(45deg,var(--primary),var(--secondary));
+  opacity:.05;border-radius:0 12px 0 100px
+}
+.kpi-card h4{
+  font-size:.875rem;font-weight:600;color:var(--gray-600);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:1rem
+}
+.kpi-card p{font-size:2.5rem;font-weight:800;color:var(--gray-900);margin:0}
+
+/* ────── Gráficos ────── */
+/* Fila (grid en lugar de flex) */
+.chart-row{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  gap:1.5rem;margin-bottom:2rem;
+}
+
+/* Caja individual */
+.chart-box{
+  background:#fff;padding:1.5rem;border-radius:12px;
+  box-shadow:var(--shadow);
+}
+.chart-box h4{margin-bottom:1rem;color:var(--gray-800);font-size:1.125rem;font-weight:600}
+
+/* Límite de alto a todos los canvas para evitar “stretch” */
+.chart-box canvas{
+  width:100%!important;     /* se adapta al ancho */
+  max-height:320px;         /* no crece más de esto */
+}
+
+/* Variante wide (ocupa todo el grid) */
+.chart-box.wide{grid-column:1/-1}
+
+/* ────── Tabla de interacciones ────── */
+.table-container{
+  background:#fff;border-radius:12px;box-shadow:var(--shadow);
+  overflow:hidden;margin-bottom:2rem
+}
+.table-container h4{
+  padding:1.5rem 2rem;margin:0;border-bottom:1px solid var(--gray-200);
+  color:var(--gray-800);font-size:1.25rem;font-weight:600
+}
+.data-table{width:100%;border-collapse:collapse;border:none}
+.data-table th{
+  background:var(--gray-50);padding:1rem 1.5rem;text-align:left;font-weight:600;
+  color:var(--gray-700);font-size:.875rem;text-transform:uppercase;
+  letter-spacing:.5px;border:none
+}
+.data-table td{
+  padding:1rem 1.5rem;border-bottom:1px solid var(--gray-200);
+  color:var(--gray-700);border-left:none;border-right:none
+}
+.data-table tr:hover td{background:var(--gray-50)}
+.data-table tr:last-child td{border-bottom:none}
+
+.status-badge{
+  display:inline-block;padding:.25rem .75rem;border-radius:20px;font-size:.75rem;
+  font-weight:500;text-transform:uppercase;letter-spacing:.5px;
+  background:var(--gray-200);color:var(--gray-700)
+}
+.status-interested{background:var(--warning);color:#fff}
+.status-qualified{background:var(--info);color:#fff}
+.status-closed{background:var(--success);color:#fff}
+
+/* ────── Utilidades ────── */
+.mt-4{margin-top:2rem}
+
+/* ────── Responsive extra ────── */
+@media(max-width:768px){
+  .dashboard-container{padding:1rem}
+  .header{flex-direction:column;gap:1rem;text-align:center}
+  .table-container{overflow-x:auto}
+}
+
+/* ────── Animaciones utilitarias ────── */
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+.loading{opacity:.6;pointer-events:none;position:relative}
+.loading::after{
+  content:'';position:absolute;top:50%;left:50%;width:20px;height:20px;margin:-10px;
+  border:2px solid var(--gray-300);border-top:2px solid var(--primary);
+  border-radius:50%;animation:spin 1s linear infinite
+}
+
+/* ────── Ajustes extra para dashboard.php ────── */
+
+/* Títulos */
+.page-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+.page-subtitle {
+  font-size: 0.95rem;
+  color: var(--gray-600);
+  margin-top: .25rem;
+}
+
+/* Botón verde (volver a Leads) */
+.btn-success {
+  background: var(--success);
+  color: #fff;
+}
+.btn-success:hover {
+  background: #2f855a; /* tono más oscuro */
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Controles de filtros (formulario arriba de los gráficos) */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 2rem;
+  background: #fff;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.controls label {
+  font-size: .875rem;
+  font-weight: 500;
+  color: var(--gray-700);
+}
+.controls input[type="date"],
+.controls select {
+  margin-left: .5rem;
+  padding: .35rem .5rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  font-size: .875rem;
+}
+.controls button {
+  margin-left: auto;
+}
+
+/* Pequeño switch auto-refresh */
+.controls .switch {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  font-size: .8rem;
+  color: var(--gray-600);
+}
+
+/* Utilidades que usa el form */
+.right { margin-left: auto; }
+.small { font-size: .8rem; color: var(--gray-600); }
+
+/* Accesibilidad: foco visible en inputs y botones */
+.controls input[type="date"],
+.controls select,
+.btn,
+a.btn {
+  outline: none;
+}
+.controls input[type="date"]:focus-visible,
+.controls select:focus-visible,
+.btn:focus-visible,
+a.btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(49, 151, 149, .25); /* usa secondary */
+  border-color: var(--secondary);
+}
+
+/* --- Back to Leads destacado --- */
+.btn-back{
+  background: linear-gradient(180deg, var(--gray-200) 0%, var(--gray-300) 100%);
+  color: var(--gray-900);
+  padding:.7rem 1.1rem;
+  border-radius:999px;                /* pill */
+  font-weight:600;
+  border:1px solid var(--gray-400);
+  box-shadow: var(--shadow-md);
+  display:inline-flex;
+  align-items:center;
+  gap:.55rem;
+}
+
+.btn-back:hover{
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
+  filter: brightness(0.98);
+  background: linear-gradient(180deg, var(--gray-300) 0%, var(--gray-400) 100%);
+}
+
+.btn-back:active{
+  transform: translateY(0);
+  box-shadow: var(--shadow);
+}
+.btn-back:focus-visible{
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(17,24,39,.18); /* anillo gris */
+}
+
+.btn-back .btn-icon{
+  display:inline-grid;
+  place-items:center;
+  width:24px;height:24px;
+  border-radius:50%;
+  background: rgba(0,0,0,.06);       /* burbuja gris tenue */
+  font-weight:700;
+  line-height:1;
+}

@@ -1,0 +1,794 @@
+/* ==========================================================================
+   1. Base Reset & Global Styles
+   ========================================================================== */
+
+   *,
+   *:before,
+   *:after {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+   }
+   
+   body {
+       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+       background-color: #f4f7fa;
+       color: #333;
+       line-height: 1.6;
+       font-size: 1rem;
+   }
+   
+   a {
+       text-decoration: none;
+       color: inherit;
+   }
+   
+   button,
+   input,
+   select,
+   textarea {
+       font-family: inherit;
+       font-size: inherit;
+       padding: 0.5rem;
+       border: 1px solid #ccc;
+       border-radius: 4px;
+       outline: none;
+       transition: border-color 0.3s ease;
+   }
+   
+   button:hover,
+   input:hover,
+   select:hover,
+   textarea:hover {
+       border-color: #2c5d4a;
+   }
+   
+   img {
+       max-width: 100%;
+       height: auto;
+   }
+   
+   .container {
+       max-width: 1200px;
+       margin: 0 auto;
+       padding: 2rem;
+       background-color: #ffffff;
+       border-radius: 8px;
+       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+   }
+   
+   /* ==========================================================================
+      2. Typography
+      ========================================================================== */
+   
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   h6 {
+       font-weight: bold;
+       margin-bottom: 1rem;
+       color: #2c5d4a;
+   }
+   
+   h1 {
+       font-size: 2rem;
+   }
+   
+   h2 {
+       font-size: 1.75rem;
+   }
+   
+   h3 {
+       font-size: 1.5rem;
+   }
+   
+   h4 {
+       font-size: 1.25rem;
+   }
+   
+   h5 {
+       font-size: 1.1rem;
+   }
+   
+   h6 {
+       font-size: 1rem;
+   }
+   
+   p {
+       margin-bottom: 1rem;
+   }
+   
+   label {
+       display: block;
+       margin-bottom: 0.5rem;
+       font-weight: bold;
+   }
+   
+   .section-title {
+       margin: 2rem 0 1rem;
+       font-size: 1.4rem;
+       border-bottom: 1px solid #ccc;
+       padding-bottom: 0.4rem;
+   }
+   
+   .actions {
+       margin-top: 1.5rem;
+   }
+   
+   .actions .btn {
+       margin-right: 0.5rem;
+   }
+   
+   .grid {
+       display: grid;
+       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+       gap: 20px;
+   }
+   
+   /* ==========================================================================
+      3. Buttons
+      ========================================================================== */
+   
+   .btn {
+       margin: 5px;
+       display: inline-flex;
+       align-items: center;
+       gap: 0.5rem;
+       padding: 0.6rem 1rem;
+       background-color: #2c5d4a;
+       color: white;
+       text-decoration: none;
+       border-radius: 6px;
+       font-weight: bold;
+       cursor: pointer;
+       transition: background-color 0.3s ease;
+   }
+   
+   .btn:hover {
+       background-color: #1f4b39;
+   }
+   
+   .btn-sm {
+       padding: 0.3rem 0.8rem;
+       font-size: 0.9rem;
+   }
+   
+   .btn-secondary {
+       background-color: #6c757d;
+   }
+   
+   .btn-secondary:hover {
+       background-color: #5a6268;
+   }
+   
+   .btn-danger {
+       background-color: #d32f2f;
+   }
+   
+   .btn-danger:hover {
+       background-color: #b71c1c;
+   }
+   
+   .btn-outline {
+       background-color: transparent;
+       color: #2c5d4a;
+       border: 1px solid #2c5d4a;
+   }
+   
+   .btn-outline:hover {
+       background-color: #2c5d4a;
+       color: #fff;
+   }
+   
+   .header-actions {
+       display: flex;
+       justify-content: space-between;
+       align-items: center;
+       margin-bottom: 1.5rem;
+   }
+   
+   /* ==========================================================================
+      4. Forms
+      ========================================================================== */
+   
+   .form-group {
+       margin-bottom: 1.5rem;
+   }
+   
+   input[type="text"],
+   input[type="email"],
+   input[type="password"],
+   input[type="tel"],
+   select,
+   textarea {
+       width: 100%;
+       padding: 0.6rem;
+       border: 1px solid #ccc;
+       border-radius: 4px;
+       transition: border-color 0.3s ease;
+   }
+   
+   textarea {
+       resize: vertical;
+       min-height: 100px;
+   }
+   
+   input[type="text"]:focus,
+   input[type="email"]:focus,
+   input[type="password"]:focus,
+   input[type="tel"]:focus,
+   select:focus,
+   textarea:focus {
+       border-color: #2c5d4a;
+   }
+   
+   /* ==========================================================================
+      5. Alerts
+      ========================================================================== */
+   
+   .alert {
+       padding: 1rem;
+       border-radius: 4px;
+       margin-bottom: 1rem;
+   }
+   
+   .alert-success {
+       background-color: #e8f5e9;
+       border-left: 4px solid #28a745;
+       color: #28a745;
+   }
+   
+   .alert-info {
+       background-color: #ebf8ff;
+       border-left: 4px solid #17a2b8;
+       color: #17a2b8;
+   }
+   
+   .alert-warning {
+       background-color: #fff3cd;
+       border-left: 5px solid #ffc107;
+       color: #ffc107;
+   }
+   
+   .alert-danger {
+       background-color: #f8d7da;
+       border-left: 4px solid #dc3545;
+       color: #dc3545;
+   }
+   
+   /* ==========================================================================
+      6. Tables
+      ========================================================================== */
+   
+   .table-container {
+       overflow-y: auto;
+       max-height: 500px; /* Adjust based on screen size */
+   }
+   
+   .table {
+       width: 100%;
+       border-collapse: collapse;
+       margin-bottom: 1.5rem;
+       background-color: #fff;
+       border-radius: 6px;
+       overflow: hidden;
+       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+   }
+   
+   .table th,
+   .table td {
+       padding: 12px 16px;
+       border-bottom: 1px solid #e0e0e0;
+   }
+   
+   .table th {
+       background-color: #2c5d4a;
+       color: #fff;
+       font-weight: 600;
+       text-align: left;
+   }
+   
+   .table tr:nth-child(even) {
+       background-color: #f2f8f5;
+   }
+   
+   .table tr:hover {
+       background-color: #eef2f7;
+   }
+   
+   .table thead {
+       position: sticky;
+       top: 0;
+       background-color: #2c5d4a;
+       color: white;
+       z-index: 1;
+   }
+   
+   /* ==========================================================================
+      7. Call History / Interaction Components
+      ========================================================================== */
+   
+   .call-history li {
+       margin-bottom: 1rem;
+       padding-bottom: 1rem;
+       border-bottom: 1px solid #eee;
+   }
+   
+   .call-meta {
+       display: flex;
+       justify-content: space-between;
+       font-size: 0.9em;
+   }
+   
+   .disposition-tag {
+       font-weight: bold;
+       padding: 2px 8px;
+       border-radius: 4px;
+       background-color: #e8f5e9;
+       color: #2e7d32;
+   }
+   
+   .disposition-tag.red {
+       background-color: #ffebee;
+       color: #c62828;
+   }
+   
+   /* ==========================================================================
+      8. Phone Actions / Copy Button
+      ========================================================================== */
+   
+   .phone-actions {
+       margin-bottom: 1.5rem;
+       padding: 0.8rem;
+       background: #e8f5e9;
+       border-radius: 6px;
+       display: flex;
+       justify-content: space-between;
+       align-items: center;
+   }
+   
+   #phone-number {
+       transition: transform 0.3s ease, color 0.3s ease, background-color 0.3s ease;
+       padding: 4px 8px;
+       border-radius: 4px;
+   }
+   
+   #phone-number.copied {
+       transform: scale(1.2);
+       color: #fff;
+       background-color: #28a745; /* green */
+   }
+   
+   #phone-number.copy-error {
+       transform: scale(1.2);
+       color: #fff;
+       background-color: #dc3545; /* red */
+   }
+   
+   /* ==========================================================================
+      9. Detail Cards / Lead Details
+      ========================================================================== */
+   
+   .detail-card {
+       background-color: #f9f9f9;
+       padding: 1rem;
+       border-radius: 6px;
+       margin-bottom: 1rem;
+       border-left: 4px solid #2c5d4a;
+   }
+   
+   .detail-card h3 {
+       margin-bottom: 0.5rem;
+       font-size: 1.1rem;
+       color: #2c5d4a;
+   }
+   
+   dl {
+       margin-bottom: 1rem;
+   }
+   
+   dt {
+       font-weight: bold;
+       font-size: 0.75rem;
+       color: #666;
+       text-transform: uppercase;
+       letter-spacing: 0.5px;
+       margin-top: 1rem;
+   }
+   
+   dd {
+       font-size: 0.95rem;
+       color: #111;
+       margin: 0 0 0.75rem 0;
+       padding-left: 0.5rem;
+   }
+   
+   .previous-calls {
+       margin-bottom: 2em;
+       background: #f9f9f9;
+       padding: 1rem;
+       border-radius: 8px;
+       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+   }
+   
+   /* ==========================================================================
+      10. Pagination
+      ========================================================================== */
+   
+   .pagination {
+       display: flex;
+       gap: 0.5rem;
+       margin-top: 1rem;
+       flex-wrap: wrap;
+   }
+   
+   .pagination a,
+   .pagination span {
+       padding: 0.4rem 0.8rem;
+       border: 1px solid #ddd;
+       border-radius: 4px;
+       text-decoration: none;
+       color: #333;
+   }
+   
+   .pagination a:hover {
+       background-color: #f0f0f0;
+   }
+   
+   .pagination .active {
+       background-color: #2c5d4a;
+       color: #fff;
+       border-color: #2c5d4a;
+   }
+   
+   /* ==========================================================================
+      11. Icons / Action Buttons
+      ========================================================================== */
+   
+   .icon {
+       display: inline-block;
+       width: 20px;
+       height: 20px;
+       margin-right: 0.5rem;
+   }
+   
+   .actions-icon {
+       display: flex;
+       justify-content: center;
+       align-items: center;
+       width: 30px;
+       height: 30px;
+       border-radius: 50%;
+       background-color: #2c5d4a;
+       color: white;
+       cursor: pointer;
+       transition: background-color 0.3s ease;
+   }
+   
+   .actions-icon:hover {
+       background-color: #1f4b39;
+   }
+   
+   /* ==========================================================================
+      12. Login / Auth Pages
+      ========================================================================== */
+   
+   .login-container {
+       max-width: 400px;
+       width: 100%;
+       margin: 3rem auto;
+       padding: 2rem;
+       background-color: #ffffff;
+       border-radius: 8px;
+       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+       text-align: center;
+   }
+   
+   .login-form input[type="email"],
+   .login-form input[type="password"] {
+       width: 100%;
+       padding: 0.6rem;
+       margin-bottom: 1rem;
+       border: 1px solid #ccc;
+       border-radius: 6px;
+   }
+   
+   /* ==========================================================================
+      13. Responsive Design
+      ========================================================================== */
+   
+   @media (max-width: 768px) {
+       .container {
+           padding: 1rem;
+       }
+   
+       .table th,
+       .table td {
+           font-size: 0.9rem;
+       }
+   
+       .grid {
+           grid-template-columns: 1fr;
+       }
+   
+       .filters {
+           grid-template-columns: 1fr;
+       }
+   
+       .dropdown-menu {
+           display: block;
+       }
+   }
+
+   select{ width: 100px;}
+
+   /* === Document List Enhancements === */
+.documents h3 {
+  margin-bottom: 1rem;
+  color: #2c5d4a;
+}
+
+.document-item:hover {
+  background-color: #f1f1f1;
+}
+
+.btn i.fas {
+  margin-right: 5px;
+}
+
+.text-muted {
+  color: #888;
+}
+
+.mt-4 {
+  margin-top: 1.5rem;
+}
+
+.mb-2 {
+  margin-bottom: 0.5rem;
+}
+
+.bg-light {
+  background-color: #fdfdfd !important;
+}
+
+/* Optional: Icons spacing */
+.fas {
+  vertical-align: middle;
+}
+
+/* Download Button Styling */
+.btn-outline-secondary {
+  border-color: #ccc;
+  color: #555;
+}
+
+.btn-outline-secondary:hover {
+  background-color: #e9ecef;
+  color: #333;
+}
+
+/*----------------*/
+/* === Document List Enhancements === */
+.documents h3 {
+  margin-bottom: 1rem;
+}
+
+.documents{
+    max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+}
+.document-item:hover {
+  background-color: #f1f1f1;
+}
+
+.document-icon {
+  vertical-align: middle;
+}
+
+.fas {
+  margin-right: 5px;
+}
+
+.text-muted {
+  color: #888;
+}
+
+.mt-4 {
+  margin-top: 1.5rem;
+}
+
+.mb-2 {
+  margin-bottom: 0.5rem;
+}
+
+.bg-light {
+  background-color: #fdfdfd !important;
+}
+
+.btn-outline-secondary {
+  border-color: #ccc;
+  color: #555;
+}
+
+.btn-outline-secondary:hover {
+  background-color: #e9ecef;
+  color: #333;
+}
+
+    .btn-slide {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.5rem 0.75rem;
+        background-color: #2c5d4a;
+        color: white;
+        text-decoration: none;
+        border-radius: 6px;
+        overflow: hidden;
+        white-space: nowrap;
+        transition: background-color 0.3s ease;
+    }
+
+    .btn-slide i {
+        font-size: 1.1em;
+        transition: transform 0.3s ease;
+    }
+    
+
+    .btn-slide span {
+        display: inline-block;
+        max-width: 0;
+        opacity: 0;
+        overflow: hidden;
+        transition: max-width 0.4s ease, opacity 0.3s ease, padding-left 0.3s ease;
+        padding-left: 0;
+        /* color: white; */
+    }
+
+    .btn-slide:hover {
+        background-color: #1f4b39;
+    }
+
+    .btn-slide:hover i {
+        transform: translateX(-5px);
+    }
+
+    .btn-slide:hover span {
+        max-width: 120px;
+        opacity: 1;
+        padding-left: 0.5rem;
+    }
+
+    /* For secondary/logout button */
+    .btn-slide.btn-secondary {
+        background-color: #6c757d;
+    }
+
+    .btn-slide.btn-secondary:hover {
+        background-color: #5a6268;
+    }
+
+    /* assets/css/app.css */
+
+body.dashboard {
+    font-family: Arial, sans-serif;
+    background-color: #f5f5f5;
+    margin: 0;
+    padding: 0;
+}
+
+.top-nav {
+    background-color: #2c3e50;
+    color: white;
+    padding: 1em 0;
+}
+
+.top-nav .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.top-nav h1 {
+    margin: 0;
+    font-size: 1.5em;
+    color: white;
+}
+
+.nav-links {
+    list-style: none;
+    display: flex;
+    gap: 1em;
+    margin: 0;
+    padding: 0;
+}
+
+.nav-links li a {
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 2em auto;
+    padding: 0 20px;
+}
+
+.card {
+    background-color: white;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-bottom: 2em;
+    overflow: hidden;
+}
+
+.card-header {
+    background-color: #34495e;
+    color: white;
+    padding: 1em;
+    font-size: 1.1em;
+}
+
+.card-body {
+    padding: 1.5em;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1em;
+}
+
+th, td {
+    padding: 0.75em;
+    text-align: left;
+    vertical-align: middle;
+    border-bottom: 1px solid #ddd;
+}
+
+th {
+    background-color: #ecf0f1;
+}
+
+td.align-middle {
+    vertical-align: middle;
+}
+
+.badge {
+    padding: 0.4em 0.6em;
+    font-size: 0.9em;
+    border-radius: 4px;
+    color: white;
+    background-color: #3498db;
+}
+
+.badge.bg-primary {
+    background-color: #3498db;
+}
+
+.badge.bg-success {
+    background-color: #2ecc71;
+}
+
+.text-muted {
+    color: #777;
+}
+
+footer {
+    background-color: #2c3e50;
+    color: white;
+    text-align: center;
+    padding: 1em 0;
+    margin-top: 3em;
+}

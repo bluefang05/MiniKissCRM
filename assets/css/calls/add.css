@@ -1,0 +1,255 @@
+/* Base Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background-color: #f8fafc;
+    color: #333;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 90%;
+    margin: 2rem auto;
+    padding: 2rem;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+h1 {
+    font-size: 1.8rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.back-button {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background-color: #343a40;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background-color 0.3s ease;
+    margin-bottom: 1.5rem;
+}
+
+.back-button:hover {
+    background-color: #232d3e;
+}
+
+.phone-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+#phone-number {
+    font-weight: bold;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    background-color: #f1f1f1;
+    transition: background-color 0.3s ease;
+}
+
+#phone-number.copied {
+    background-color: #d4edda;
+}
+
+#phone-number.copy-error {
+    background-color: #f8d7da;
+}
+
+.call-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.call-button:hover {
+    background-color: #218838;
+}
+
+/* Formulario */
+.call-form {
+    background: #fff;
+    padding: 1.5rem;
+    border-radius: 6px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    margin-top: 1.5rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+    color: #495057;
+}
+
+select,
+input[type="number"],
+textarea {
+    width: 100%;
+    padding: 0.6rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+textarea {
+    resize: vertical;
+    height: 100px;
+}
+
+select:focus,
+input:focus,
+textarea:focus {
+    outline: none;
+    border-color: #28a745;
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.25);
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.95rem;
+}
+
+input[type="checkbox"] {
+    transform: scale(1.2);
+}
+
+.btn-submit {
+    background-color: #2c5d4a;
+    color: white;
+    padding: 0.6rem 1.2rem;
+    font-size: 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.btn-submit:hover {
+    background-color: #244b3a;
+}
+
+/* Historial de llamadas */
+.previous-calls {
+    margin-top: 2rem;
+    background: #fff;
+    padding: 1rem;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.interaction-list {
+    list-style-type: none;
+    padding: 0;
+}
+
+.interaction-item {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #eee;
+}
+
+.interaction-item:last-child {
+    border-bottom: none;
+}
+
+.interaction-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+}
+
+.call-status {
+    display: inline-block;
+    padding: 0.2em 0.5em;
+    font-size: 0.8rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    border-radius: 4px;
+    color: white;
+    margin-bottom: 0.5rem;
+}
+
+.call-status.follow-up {
+    background-color: #ffc107;
+}
+
+.call-status.interested {
+    background-color: #28a745;
+}
+
+.call-status.not-interested {
+    background-color: #dc3545;
+}
+
+.call-status.left-voicemail {
+    background-color: #17a2b8;
+}
+
+.call-status.service-sold {
+    background-color: #20c997;
+}
+
+.call-status.do-not-call {
+    background-color: #6c757d;
+}
+
+.alert {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .phone-actions {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .call-button {
+        width: 100%;
+        justify-content: center;
+    }
+
+    #phone-number {
+        font-size: 1rem;
+    }
+}
+
+.form-group > *{
+    margin: 5px;
+    width: 150px;
+    height: 50px;
+}

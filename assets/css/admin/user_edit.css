@@ -1,0 +1,176 @@
+/* assets/css/admin/user_edit.css */
+
+/* 1. Color palette & globals */
+:root {
+  --c-bg: #ffffff;
+  --c-surface: #f4f6f8;
+  --c-fg: #333333;
+  --c-sub: #6c757d;
+  --c-border: #d1d5db;
+  --c-brand: #2c5d4a;
+  --c-brand-light: #f2f8f5;
+  --c-accent: #007bff;
+  --c-error: #dc3545;
+  --radius: 8px;
+  --spacing: 1rem;
+  --font-base: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-base);
+  background: var(--c-surface);
+  color: var(--c-fg);
+}
+
+/* 2. Page & back-button */
+.container {
+  max-width: 520px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.back-button {
+  display: inline-block;
+  margin-bottom: var(--spacing);
+  padding: 0.5rem 1rem;
+  background: var(--c-sub);
+  color: #fff;
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+.back-button:hover {
+  background: #5a6268;
+}
+
+/* 3. Form “card” */
+.form-card {
+  background: var(--c-bg);
+  padding: calc(var(--spacing) * 1.5);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+/* 4. Heading */
+.form-card h1 {
+  margin: 0 0 var(--spacing) 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--c-fg);
+}
+
+/* 5. Form fields */
+.form-group {
+  margin-bottom: var(--spacing);
+}
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: var(--c-fg);
+}
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="password"],
+.form-group select {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.95rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-bg);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--c-brand);
+  box-shadow: 0 0 0 3px rgba(44,93,74,0.1);
+}
+
+/* 6. Password hint */
+.form-group small {
+  color: var(--c-sub);
+  font-size: 0.85rem;
+}
+
+/* 7. Roles checklist */
+.roles-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.5rem;
+}
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+.checkbox-label input {
+  transform: scale(1.15);
+  margin: 0;
+  accent-color: var(--c-brand);
+}
+
+/* 8. Error message */
+.error {
+  padding: 0.75rem 1rem;
+  background: rgba(220,53,69,0.1);
+  border: 1px solid var(--c-error);
+  border-radius: var(--radius);
+  color: var(--c-error);
+  margin-bottom: var(--spacing);
+  font-size: 0.95rem;
+}
+
+/* 9. Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  text-decoration: none;
+  color: #fff;
+}
+.btn-primary {
+  background: var(--c-brand);
+}
+.btn-primary:hover {
+  background: #234634;
+}
+.btn-secondary {
+  background: var(--c-sub);
+}
+.btn-secondary:hover {
+  background: #5a6268;
+}
+
+/* 10. Footer spacing */
+.form-actions {
+  margin-top: calc(var(--spacing) * 1.5);
+  display: flex;
+  gap: var(--spacing);
+}
+
+/* 11. Responsive tweaks */
+@media (max-width: 480px) {
+  .roles-list {
+    grid-template-columns: 1fr;
+  }
+  .form-actions {
+    flex-direction: column;
+  }
+}
