@@ -12,6 +12,7 @@ $user = Auth::user();
 $roles = $user['roles'] ?? [];
 
 // Capabilities
+$canViewCallMonitor = (bool) array_intersect($roles, ['admin', 'owner']);
 $canCreate = (bool) array_intersect($roles, ['admin', 'lead_manager', 'sales', 'owner']);
 $canImport = $canCreate;
 $canViewCalls = (bool) array_intersect($roles, ['admin', 'sales']);
@@ -287,6 +288,12 @@ $baseUrl = 'list.php' . (count($query) ? '?' . http_build_query($query) . '&' : 
 
     <!-- Actions -->
     <div class="actions">
+      <?php if ($canViewCallMonitor): ?>
+  <a class="btn-slide" href="../admin/monitor.php">
+    <i class="fas fa-headset"></i><span> Call Monitor</span>
+  </a>
+<?php endif; ?>
+
       <?php if ($canViewDashboard): ?>
         <a class="btn-slide" href="../admin/dashboard.php">
           <i class="fas fa-tachometer-alt"></i><span> Dashboard</span>

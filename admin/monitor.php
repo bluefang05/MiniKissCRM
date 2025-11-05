@@ -1,0 +1,1141 @@
+<?php
+declare(strict_types=1);
+/**
+ * MightyCall Monitoring Dashboard (Enhanced Version) + Pagination
+ *
+ * - Cache con TTL
+ * - Análisis avanzado
+ * - Alertas básicas
+ * - Export CSV
+ * - Rango laboral (Lun–Vie)
+ * - Paginación de “Recent calls” (page & perPage)
+ *
+ * SECURITY NOTE: FOR LOCAL/INTERNAL USE ONLY. Do not expose publicly.
+ */
+
+/* ========= AUTH GUARD (antes de cualquier salida) ========= */
+require_once __DIR__ . '/../lib/Auth.php';
+if (!Auth::check()) {
+    header('Location: ../auth/login.php', true, 302);
+    exit;
+}
+$roles = Auth::user()['roles'] ?? [];
+if (!is_array($roles)) $roles = [$roles];
+if (!array_intersect(['owner','admin'], $roles)) {
+    header('Location: ../leads/list.php', true, 302);
+    exit;
+}
+
+/* ================== CONFIGURATION ================== */
+putenv('MIGHTYCALL_API_KEY=0bb0f2ee-ff6f-4be5-8530-4d35a01e80cc'); // client_id
+putenv('MIGHTYCALL_SECRET_KEY=dc73c680f799');                      // client_secret (USER_KEY)
+putenv('MIGHTYCALL_BASE=https://api.mightycall.com/v4/api');       // base URL con /api
+putenv('MIGHTYCALL_GRANT=client_credentials');                     // grant_type
+// Cache
+putenv('CACHE_ENABLED=true');
+putenv('CACHE_DURATION=1800');                                     // 30 min
+putenv('CACHE_DIR=' . __DIR__ . '/cache');
+// Reports / Alerts
+putenv('REPORTS_DIR=' . __DIR__ . '/reports');
+putenv('ALERTS_ENABLED=true');
+
+@ini_set('memory_limit', '2048M');
+@set_time_limit(0);
+
+/* ================== UTILS ================== */
+function envOrFail(string $k): string {
+  $v = getenv($k);
+  if ($v === false || $v === '') throw new RuntimeException("Missing env: $k");
+  return $v;
+}
+function env_bool(string $k, bool $def=false): bool {
+  $v = getenv($k);
+  if ($v === false) return $def;
+  $v = strtolower(trim((string)$v));
+  return in_array($v, ['1','true','yes','on'], true);
+}
+function ensure_dir(string $p): void {
+  if (!is_dir($p)) @mkdir($p, 0777, true);
+}
+function log_message(string $message, string $level = 'INFO'): void {
+  $logFile = __DIR__ . '/logs/mightycall.log';
+  ensure_dir(dirname($logFile));
+  $timestamp = date('Y-m-d H:i:s');
+  file_put_contents($logFile, "[$timestamp] [$level] $message" . PHP_EOL, FILE_APPEND);
+}
+function get_cache_key(string $prefix, array $params): string {
+  return $prefix . '_' . md5(serialize($params));
+}
+function get_cache(string $key): ?array {
+  if (!env_bool('CACHE_ENABLED')) return null;
+  $cacheDir = getenv('CACHE_DIR');
+  ensure_dir($cacheDir);
+  $cacheFile = $cacheDir . '/' . $key . '.json';
+  if (!file_exists($cacheFile)) return null;
+  $data = json_decode(file_get_contents($cacheFile), true);
+  if (!$data || time() > ($data['expires'] ?? 0)) {
+    @unlink($cacheFile);
+    return null;
+  }
+  return $data['content'] ?? null;
+}
+function set_cache(string $key, array $content): void {
+  if (!env_bool('CACHE_ENABLED')) return;
+  $cacheDir = getenv('CACHE_DIR');
+  ensure_dir($cacheDir);
+  $cacheFile = $cacheDir . '/' . $key . '.json';
+  $data = [
+    'content' => $content,
+    'expires' => time() + (int)getenv('CACHE_DURATION')
+  ];
+  file_put_contents($cacheFile, json_encode($data));
+}
+
+/* Permite headers extra (x-api-key) */
+function http_post_form(string $url, array $fields, array $extraHeaders = []): array {
+  $headers = array_merge(['Content-Type: application/x-www-form-urlencoded'], $extraHeaders);
+  $ch = curl_init($url);
+  curl_setopt_array($ch, [
+    CURLOPT_POST           => true,
+    CURLOPT_POSTFIELDS     => http_build_query($fields),
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT        => 60,
+    CURLOPT_HTTPHEADER     => $headers,
+  ]);
+  $raw = curl_exec($ch);
+  if ($raw === false) throw new RuntimeException('cURL error: ' . curl_error($ch));
+  $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  curl_close($ch);
+  if ($code >= 400) throw new RuntimeException("HTTP $code: " . $raw);
+  $json = json_decode($raw, true);
+  if (!is_array($json)) throw new RuntimeException("Invalid JSON: " . $raw);
+  return $json;
+}
+
+function http_get_json_with_retry(string $url, string $bearer, array $qs = [], int $retries = 4): array {
+  if ($qs) $url .= ((strpos($url, '?') !== false) ? '&' : '?') . http_build_query($qs); // compat PHP<8
+  log_message("Requesting URL: " . $url);
+  $delay = 1.0;
+  for ($i = 0; $i <= $retries; $i++) {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+      CURLOPT_RETURNTRANSFER => true,
+      CURLOPT_TIMEOUT => 60,
+      CURLOPT_HTTPHEADER => [
+        'Authorization: Bearer ' . $bearer,
+        'x-api-key: ' . getenv('MIGHTYCALL_API_KEY')
+      ],
+    ]);
+    $raw = curl_exec($ch);
+    $err = curl_error($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($raw === false) {
+      if ($i === $retries) throw new RuntimeException('cURL error: ' . $err);
+    } else {
+      $json = json_decode($raw, true);
+      if ($code === 429 || $code >= 500) {
+        log_message("Retryable error: HTTP $code, attempt " . ($i + 1) . "/" . ($retries + 1), 'WARNING');
+      } else {
+        if ($code >= 400) throw new RuntimeException("HTTP $code: " . $raw);
+        if (!is_array($json)) throw new RuntimeException("Invalid JSON: " . $raw);
+        return $json;
+      }
+    }
+    usleep((int)($delay * 1_000_000)); // backoff exponencial
+    $delay *= 1.8;
+  }
+  throw new RuntimeException('HTTP retries exhausted');
+}
+
+function fmt_hms_from_ms($ms): string {
+  $sec = (int)round(((int)$ms) / 1000);
+  $h = intdiv($sec, 3600); $sec %= 3600; $m = intdiv($sec, 60); $s = $sec % 60;
+  return sprintf('%02d:%02d:%02d', $h, $m, $s);
+}
+function format_bytes(int $bytes, int $precision = 2): string {
+  $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  $bytes = max($bytes, 0);
+  $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+  $pow = min($pow, count($units) - 1);
+  $bytes /= pow(1024, $pow);
+  return round($bytes, $precision) . ' ' . $units[$pow];
+}
+
+/* ================== AUTH (CACHED) ================== */
+$BASE   = envOrFail('MIGHTYCALL_BASE');   // e.g. https://api.mightycall.com/v4/api
+$APIKEY = envOrFail('MIGHTYCALL_API_KEY');
+$SECRET = envOrFail('MIGHTYCALL_SECRET_KEY');
+$GRANT  = getenv('MIGHTYCALL_GRANT') ?: 'client_credentials';
+
+// Deriva AUTH_BASE quitando el sufijo /api del BASE (=> https://api.mightycall.com/v4)
+$AUTH_BASE = preg_replace('~/api/?$~', '', rtrim($BASE, '/'));
+
+ensure_dir(__DIR__ . '/logs');
+$tokenFile = __DIR__ . '/logs/mc_token.json';
+
+$loadTok = function () use ($tokenFile) {
+  if (!file_exists($tokenFile)) return null;
+  $j = json_decode((string)@file_get_contents($tokenFile), true);
+  if (!$j || time() >= (int)($j['expires_at'] ?? 0) - 60) return null;
+  return $j;
+};
+$saveTok = function (array $auth) use ($tokenFile) {
+  $ttl = (int)($auth['expires_in'] ?? 0);
+  $auth['expires_at'] = time() + max(0, $ttl);
+  @file_put_contents($tokenFile, json_encode($auth, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+};
+
+$tok = $loadTok();
+if (!$tok) {
+  // Endpoint correcto en v4: /auth/token (NO /oauth/token)
+  $tokenUrl = $AUTH_BASE . '/auth/token';
+  log_message("Requesting token at: " . $tokenUrl);
+  $auth = http_post_form(
+    $tokenUrl,
+    [
+      'client_id'     => $APIKEY,
+      'client_secret' => $SECRET,
+      'grant_type'    => $GRANT
+    ],
+    ['x-api-key: ' . $APIKEY]
+  );
+  $saveTok($auth);
+  $tok = $loadTok();
+}
+if (!$tok) { http_response_code(500); die('Auth failed'); }
+$accessToken = $tok['access_token'];
+
+/* ================== DATA ACCESS ================== */
+function get_date_range(): array {
+  // Default: últimos 30 días (hoy-29 .. hoy)
+  $since = $_GET['since'] ?? (new DateTimeImmutable('now -29 days'))->format('Y-m-d');
+  $until = $_GET['until'] ?? (new DateTimeImmutable('now'))->format('Y-m-d');
+  $fromIso = (new DateTimeImmutable($since . ' 00:00:00'))->format('c');
+  $toIso   = (new DateTimeImmutable($until . ' 23:59:59'))->format('c');
+  return [$since, $until, $fromIso, $toIso];
+}
+
+function fetch_calls_paged(string $base, string $token, string $fromIso, string $toIso, array $filters = []): array {
+  $cacheKey = get_cache_key('calls', [
+    'from' => $fromIso, 'to' => $toIso, 'filters' => $filters
+  ]);
+  if ($cached = get_cache($cacheKey)) {
+    log_message("Using cached data for calls");
+    return $cached;
+  }
+
+  $skip = 0; $pageSize = 100; $all = []; $hasMore = true;
+  for ($i = 0; $i < 100 && $hasMore; $i++) {
+    $qs = array_merge([
+      'startUtc' => $fromIso,
+      'endUtc'   => $toIso,
+      'skip'     => $skip,
+      'pageSize' => $pageSize
+    ], $filters);
+
+    $res = http_get_json_with_retry(rtrim($base, '/') . '/calls', $token, $qs);
+    $data  = $res['data'] ?? $res;
+    $calls = $data['calls'] ?? [];
+    $total = (int)($data['total'] ?? 0);
+
+    $all = array_merge($all, $calls);
+    $hasMore = count($calls) === $pageSize && count($all) < $total;
+    $skip += $pageSize;
+
+    log_message("Fetched page " . ($i + 1) . ": " . count($calls) . " calls, total so far: " . count($all));
+  }
+  set_cache($cacheKey, $all);
+  return $all;
+}
+
+function fetch_contacts_paged(string $base, string $token): array {
+  $cacheKey = get_cache_key('contacts', []);
+  if ($cached = get_cache($cacheKey)) {
+    log_message("Using cached data for contacts");
+    return $cached;
+  }
+  $page = 1; $pageSize = 200; $all = [];
+  for ($i = 0; $i < 100; $i++) {
+    $res = http_get_json_with_retry(rtrim($base, '/') . '/contacts', $token, ['page' => $page, 'pageSize' => $pageSize]);
+    $data = $res['data'] ?? $res;
+    $contacts = $data['contacts'] ?? [];
+    $pages = (int)($data['pages'] ?? 1);
+    $all = array_merge($all, $contacts);
+    if ($page >= $pages || count($contacts) === 0) break;
+    $page++;
+  }
+  set_cache($cacheKey, $all);
+  return $all;
+}
+
+/* ================== ADVANCED ANALYSIS ================== */
+function perform_advanced_analysis(array $calls): array {
+  if (empty($calls)) return [];
+  $analysis = [];
+
+  // Day of week
+  $dayOfWeekCalls = []; $dayOfWeekDuration = [];
+  foreach ($calls as $call) {
+    $date = new DateTime($call['dateTimeUtc']);
+    $day = $date->format('l');
+    $dayOfWeekCalls[$day]    = ($dayOfWeekCalls[$day]    ?? 0) + 1;
+    $dayOfWeekDuration[$day] = ($dayOfWeekDuration[$day] ?? 0) + (int)($call['duration'] ?? 0);
+  }
+  $analysis['dayOfWeek'] = [
+    'calls' => $dayOfWeekCalls,
+    'avgDuration' => array_map(
+      fn($dur, $cnt) => $cnt > 0 ? $dur / $cnt : 0,
+      $dayOfWeekDuration, $dayOfWeekCalls
+    )
+  ];
+
+  // Hour of day
+  $hourOfDayCalls = []; $hourOfDayDuration = [];
+  foreach ($calls as $call) {
+    $date = new DateTime($call['dateTimeUtc']);
+    $hour = (int)$date->format('H');
+    $hourOfDayCalls[$hour]    = ($hourOfDayCalls[$hour]    ?? 0) + 1;
+    $hourOfDayDuration[$hour] = ($hourOfDayDuration[$hour] ?? 0) + (int)($call['duration'] ?? 0);
+  }
+  $analysis['hourOfDay'] = [
+    'calls' => $hourOfDayCalls,
+    'avgDuration' => array_map(
+      fn($dur, $cnt) => $cnt > 0 ? $dur / $cnt : 0,
+      $hourOfDayDuration, $hourOfDayCalls
+    )
+  ];
+
+  // Agents
+  $agentCalls = []; $agentDuration = []; $agentConnected = []; $agentMissed = [];
+  foreach ($calls as $call) {
+    $agent = ($call['caller']['name'] ?? '') . ' (' . ($call['caller']['extension'] ?? '') . ')';
+    $agentCalls[$agent]    = ($agentCalls[$agent]    ?? 0) + 1;
+    $agentDuration[$agent] = ($agentDuration[$agent] ?? 0) + (int)($call['duration'] ?? 0);
+    $st = ($call['callStatus'] ?? '');
+    if ($st === 'Connected') $agentConnected[$agent] = ($agentConnected[$agent] ?? 0) + 1;
+    elseif ($st === 'Missed') $agentMissed[$agent] = ($agentMissed[$agent] ?? 0) + 1;
+  }
+  $analysis['agents'] = [];
+  foreach ($agentCalls as $agent => $count) {
+    $analysis['agents'][$agent] = [
+      'totalCalls'     => $count,
+      'totalDuration'  => $agentDuration[$agent] ?? 0,
+      'avgDuration'    => $count > 0 ? ($agentDuration[$agent] ?? 0) / $count : 0,
+      'connectedCalls' => $agentConnected[$agent] ?? 0,
+      'missedCalls'    => $agentMissed[$agent] ?? 0,
+      'connectionRate' => $count > 0 ? (($agentConnected[$agent] ?? 0) / $count) * 100 : 0
+    ];
+  }
+
+  // Durations
+  $durations = array_map(fn($c) => (int)($c['duration'] ?? 0), $calls);
+  sort($durations);
+  $cnt = count($durations);
+  $analysis['duration'] = [
+    'min'    => $cnt ? $durations[0] : 0,
+    'max'    => $cnt ? $durations[$cnt-1] : 0,
+    'avg'    => $cnt ? array_sum($durations) / $cnt : 0,
+    'median' => $cnt ? $durations[(int)floor($cnt / 2)] : 0,
+    'p95'    => $cnt ? $durations[(int)floor($cnt * 0.95)] : 0
+  ];
+
+  return $analysis;
+}
+
+/* ================== ALERTS ================== */
+function check_alerts(array $calls, array $analysis): array {
+  if (!env_bool('ALERTS_ENABLED')) return [];
+  $alerts = [];
+
+  $today = new DateTime('today');
+  $yesterday = (clone $today)->sub(new DateInterval('P1D'));
+
+  $yesterdayCalls = array_filter($calls, function($call) use ($yesterday) {
+    $callDate = new DateTime($call['dateTimeUtc']);
+    return $callDate->format('Y-m-d') === $yesterday->format('Y-m-d');
+  });
+
+  // Low connection rate
+  $connectedCalls = array_filter($yesterdayCalls, fn($c) => ($c['callStatus'] ?? '') === 'Connected');
+  $connectionRate = count($yesterdayCalls) ? (count($connectedCalls) / count($yesterdayCalls)) * 100 : 0;
+  if ($connectionRate < 70) {
+    $alerts[] = [
+      'type' => 'warning',
+      'title' => 'Low connection rate',
+      'message' => "Yesterday's connection rate was " . round($connectionRate, 1) . "% (" . count($connectedCalls) . " of " . count($yesterdayCalls) . " calls connected)",
+      'value' => $connectionRate,
+      'threshold' => 70
+    ];
+  }
+
+  // High missed rate
+  $missedCalls = array_filter($yesterdayCalls, fn($c) => ($c['callStatus'] ?? '') === 'Missed');
+  $missedRate = count($yesterdayCalls) ? (count($missedCalls) / count($yesterdayCalls)) * 100 : 0;
+  if ($missedRate > 30) {
+    $alerts[] = [
+      'type' => 'warning',
+      'title' => 'High missed call rate',
+      'message' => "Yesterday's missed call rate was " . round($missedRate, 1) . "% (" . count($missedCalls) . " of " . count($yesterdayCalls) . " calls missed)",
+      'value' => $missedRate,
+      'threshold' => 30
+    ];
+  }
+
+  return $alerts;
+}
+
+/* ================== API ENDPOINTS ================== */
+$action = $_GET['action'] ?? null;
+
+if ($action === 'health') {
+  header('Content-Type: application/json');
+  echo json_encode(['ok' => true, 'timestamp' => date('c')]);
+  exit;
+}
+
+if ($action === 'calls' || $action === 'metrics') {
+  [$since, $until, $fromIso, $toIso] = get_date_range();
+
+  $agent     = $_GET['agent']      ?? null;
+  $direction = $_GET['direction']  ?? null;
+  $status    = $_GET['status']     ?? null;
+  $hasRec    = isset($_GET['hasRecording']) ? (bool)$_GET['hasRecording'] : null;
+
+  // Parámetros de paginación para la tabla "Recent"
+  $page    = max(1, (int)($_GET['page']    ?? 1));
+  $perPage = (int)($_GET['perPage'] ?? 25);
+  if ($perPage < 5)   $perPage = 5;
+  if ($perPage > 200) $perPage = 200;
+
+  $raw = fetch_calls_paged($BASE, $accessToken, $fromIso, $toIso);
+
+  // Filtros locales
+  $calls = array_values(array_filter($raw, function ($c) use ($agent, $direction, $status, $hasRec) {
+    if ($agent) {
+      $ext = $c['caller']['extension'] ?? '';
+      $nm  = $c['caller']['name'] ?? '';
+      if (stripos((string)$ext, $agent) === false && stripos((string)$nm, $agent) === false) return false;
+    }
+    if ($direction && ($c['direction'] ?? '') !== $direction) return false;
+    if ($status && ($c['callStatus'] ?? '') !== $status) return false;
+    if ($hasRec !== null) {
+      $has = !empty($c['callRecord']['uri']);
+      if (($hasRec && !$has) || (!$hasRec && $has)) return false;
+    }
+    return true;
+  }));
+
+  if ($action === 'calls') {
+    // Si alguien consume /calls directamente, devolvemos página también
+    $sorted = array_values(array_reverse($calls)); // más recientes primero
+    $total  = count($sorted);
+    $pages  = max(1, (int)ceil($total / $perPage));
+    if ($page > $pages) $page = $pages;
+    $offset = ($page - 1) * $perPage;
+    $slice  = array_slice($sorted, $offset, $perPage);
+
+    header('Content-Type: application/json');
+    echo json_encode([
+      'range' => ['since' => $since, 'until' => $until],
+      'total' => $total,
+      'page'  => $page,
+      'perPage' => $perPage,
+      'pages' => $pages,
+      'calls' => $slice
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+  }
+
+  // Metrics (agregados) — se calculan sobre todo el set filtrado
+  $today = (new DateTimeImmutable('today'))->format('Y-m-d');
+  $callsToday = array_filter($calls, fn($c) => substr((string)$c['dateTimeUtc'], 0, 10) === $today);
+
+  $connected = array_filter($calls, fn($c) => ($c['callStatus'] ?? '') === 'Connected');
+  $missed    = array_filter($calls, fn($c) => ($c['callStatus'] ?? '') === 'Missed');
+  $dropped   = array_filter($calls, fn($c) => ($c['callStatus'] ?? '') === 'Dropped');
+
+  $totalDurMs = array_sum(array_map(fn($c) => (int)($c['duration'] ?? 0), $connected));
+  $avgDurMs   = $connected ? (int)round($totalDurMs / count($connected)) : 0;
+
+  // Series por día
+  $bucket = [];
+  foreach ($calls as $c) {
+    $d = substr((string)($c['dateTimeUtc'] ?? ''), 0, 10);
+    if (!$d) continue;
+    $bucket[$d] ??= ['Incoming' => 0, 'Outgoing' => 0, 'Connected' => 0, 'Missed' => 0];
+
+    $dir = $c['direction'] ?? 'Outgoing';
+    if ($dir === 'Incoming') $bucket[$d]['Incoming']++; else $bucket[$d]['Outgoing']++;
+
+    $st = $c['callStatus'] ?? '';
+    if ($st === 'Connected') $bucket[$d]['Connected']++; elseif ($st === 'Missed') $bucket[$d]['Missed']++;
+  }
+  ksort($bucket);
+
+  // Top agents
+  $agents = [];
+  foreach ($calls as $c) {
+    $agentKey = ($c['caller']['name'] ?? '') ?: ($c['caller']['extension'] ?? 'Unknown');
+    $agents[$agentKey] ??= ['name' => $agentKey, 'calls' => 0, 'durMs' => 0];
+    $agents[$agentKey]['calls']++;
+    if (($c['callStatus'] ?? '') === 'Connected') $agents[$agentKey]['durMs'] += (int)($c['duration'] ?? 0);
+  }
+  usort($agents, fn($a, $b) => $b['durMs'] <=> $a['durMs']);
+  $topAgents = array_slice($agents, 0, 10);
+
+  // “Recent calls” paginado
+  $sorted = array_values(array_reverse($calls)); // más recientes primero
+  $recentTotal = count($sorted);
+  $recentPages = max(1, (int)ceil($recentTotal / $perPage));
+  if ($page > $recentPages) $page = $recentPages;
+  $offset = ($page - 1) * $perPage;
+  $recent = array_slice($sorted, $offset, $perPage);
+
+  // Opcionales
+  $analysis = isset($_GET['analysis']) ? perform_advanced_analysis($calls) : [];
+  $alerts   = isset($_GET['alerts'])   ? check_alerts($calls, $analysis)   : [];
+
+  header('Content-Type: application/json');
+  echo json_encode([
+    'range'  => ['since' => $since, 'until' => $until],
+    'totals' => [
+      'calls' => count($calls),
+      'connected' => count($connected),
+      'missed' => count($missed),
+      'dropped' => count($dropped),
+      'connectedRate' => (count($calls) > 0) ? round(count($connected) / count($calls) * 100, 1) : 0.0,
+      'avgConnectedDurationMs'  => $avgDurMs,
+      'avgConnectedDurationHMS' => fmt_hms_from_ms($avgDurMs),
+      'callsToday' => count($callsToday),
+    ],
+    'series'    => $bucket,
+    'topAgents' => $topAgents,
+    'recent'    => $recent,
+    'recentPagination' => [
+      'total'   => $recentTotal,
+      'page'    => $page,
+      'perPage' => $perPage,
+      'pages'   => $recentPages
+    ],
+    'analysis'  => $analysis,
+    'alerts'    => $alerts
+  ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+  exit;
+}
+
+if ($action === 'contacts') {
+  $contacts = fetch_contacts_paged($BASE, $accessToken);
+  header('Content-Type: application/json');
+  echo json_encode(['count' => count($contacts), 'contacts' => $contacts],
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+  exit;
+}
+
+if ($action === 'export') {
+  $format = $_GET['format'] ?? 'csv';
+  [$since, $until, $fromIso, $toIso] = get_date_range();
+
+  $agent     = $_GET['agent']      ?? null;
+  $direction = $_GET['direction']  ?? null;
+  $status    = $_GET['status']     ?? null;
+  $hasRec    = isset($_GET['hasRecording']) ? (bool)$_GET['hasRecording'] : null;
+
+  $raw = fetch_calls_paged($BASE, $accessToken, $fromIso, $toIso);
+  $calls = array_values(array_filter($raw, function ($c) use ($agent, $direction, $status, $hasRec) {
+    if ($agent) {
+      $ext = $c['caller']['extension'] ?? '';
+      $nm  = $c['caller']['name'] ?? '';
+      if (stripos((string)$ext, $agent) === false && stripos((string)$nm, $agent) === false) return false;
+    }
+    if ($direction && ($c['direction'] ?? '') !== $direction) return false;
+    if ($status && ($c['callStatus'] ?? '') !== $status) return false;
+    if ($hasRec !== null) {
+      $has = !empty($c['callRecord']['uri']);
+      if (($hasRec && !$has) || (!$hasRec && $has)) return false;
+    }
+    return true;
+  }));
+
+  if ($format === 'csv') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="mightycall_calls_' . $since . '_to_' . $until . '.csv"');
+    $out = fopen('php://output', 'w');
+
+    fputcsv($out, [
+      'ID', 'Date/Time (UTC)', 'Direction', 'Call Status', 'Business Number',
+      'Agent Name', 'Agent Extension', 'Agent Phone',
+      'Peer Name', 'Peer Phone', 'Peer Is Connected',
+      'Duration (ms)', 'Duration (HH:MM:SS)', 'Has Recording', 'Recording URI'
+    ]);
+
+    foreach ($calls as $c) {
+      $id = $c['id'] ?? '';
+      $dt = $c['dateTimeUtc'] ?? '';
+      $dir = $c['direction'] ?? '';
+      $st = $c['callStatus'] ?? '';
+      $biz = $c['businessNumber'] ?? '';
+      $aname = $c['caller']['name'] ?? '';
+      $aext = $c['caller']['extension'] ?? '';
+      $aphone = $c['caller']['phone'] ?? '';
+
+      // Si no hay "called", igual emitimos una fila básica
+      if (empty($c['called'])) {
+        $dur = (int)($c['duration'] ?? 0);
+        $hasRecF = !empty($c['callRecord']['uri']) ? 1 : 0;
+        $recUri = $c['callRecord']['uri'] ?? '';
+        fputcsv($out, [
+          $id, $dt, $dir, $st, $biz,
+          $aname, $aext, $aphone,
+          '', '', 'No',
+          $dur, fmt_hms_from_ms($dur), $hasRecF, $recUri
+        ]);
+        continue;
+      }
+
+      foreach ($c['called'] as $peer) {
+        $peerName = $peer['name'] ?? '';
+        $peerPhone = $peer['phone'] ?? '';
+        $peerIsConnected = !empty($peer['isConnected']) ? 'Yes' : 'No';
+        $dur = (int)($c['duration'] ?? 0);
+        $hasRecF = !empty($c['callRecord']['uri']) ? 1 : 0;
+        $recUri = $c['callRecord']['uri'] ?? '';
+
+        fputcsv($out, [
+          $id, $dt, $dir, $st, $biz,
+          $aname, $aext, $aphone,
+          $peerName, $peerPhone, $peerIsConnected,
+          $dur, fmt_hms_from_ms($dur), $hasRecF, $recUri
+        ]);
+      }
+    }
+    fclose($out);
+    exit;
+  }
+
+  header('Content-Type: application/json');
+  echo json_encode(['error' => 'Excel export requires PHPExcel library']);
+  exit;
+}
+
+/* ================== FRONT-END (HTML) ================== */
+?>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MightyCall Monitoring Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* Basic Reset & Page Style */
+    body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif; background:#0f1419; color:#e9ecf1; margin:0; padding:0; line-height:1.5; }
+    .wrap { max-width:1400px; margin:0 auto; padding:12px; }
+    h1, h2, h3 { margin:0; font-weight:600; }
+    h1 { font-size:24px; }
+    h2 { font-size:20px; margin:16px 0 8px; }
+    h3 { font-size:16px; margin:12px 0 6px; }
+    a { color:#60a5fa; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    .muted { color:#9aa5c4; font-size:0.9em; }
+    .badge { background:#1e293b; padding:2px 8px; border-radius:4px; font-size:0.85em; display:inline-block; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .split { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .grid { display:grid; gap:16px; }
+    .grid.kpis { grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); }
+    .card { background:#1e293b; border-radius:8px; padding:16px; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
+    label { display:flex; align-items:center; gap:6px; font-size:0.9em; }
+    input, select { background:#0f1419; border:1px solid #334155; color:#e9ecf1; border-radius:4px; padding:6px 10px; }
+    input[type="date"] { padding:4px 8px; }
+    .btn { background:#334155; color:#e9ecf1; border:none; border-radius:4px; padding:8px 12px; cursor:pointer; font-size:0.9em; transition:background 0.2s; }
+    .btn:hover { background:#475569; }
+    .btn.active { background:#3b82f6; }
+    .btn.btn-apply { background:#10b981; }
+    .btn.btn-apply.dirty { animation:pulse 2s infinite; }
+    .btn.btn-export { background:#8b5cf6; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
+    .big { font-size:28px; font-weight:700; margin:8px 0; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; }
+    th, td { padding:8px 12px; text-align:left; border-bottom:1px solid #334155; }
+    th { font-weight:600; color:#cbd5e1; }
+    tr:hover { background:#0f172a; }
+    #chartWrap { height:300px; position:relative; }
+    .alert { padding:12px; border-radius:6px; margin-bottom:12px; }
+    .alert-warning { background:#92400e; border-left:4px solid #f59e0b; }
+    .alert-info { background:#1e3a8a; border-left:4px solid #3b82f6; }
+    .alert-title { font-weight:600; margin-bottom:4px; }
+    @media (max-width:768px) {
+      .split { grid-template-columns:1fr; }
+      .grid.kpis { grid-template-columns:1fr; }
+      .row { flex-direction:column; align-items:stretch; }
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+  <h1 style="margin:8px 0 16px">MightyCall Monitoring Dashboard</h1>
+  <a href="../leads/list.php" class="btn" style="background:#6c757d;color:white;text-decoration:none;display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;">
+    <span>←</span> Back to Leads
+  </a>
+
+  <div class="card row" style="justify-content:space-between">
+    <!-- LEFT: Filters -->
+    <div class="row" id="filtersRow">
+      <label>Since <input type="date" id="since"></label>
+      <label>Until <input type="date" id="until"></label>
+      <label>Agent
+        <select id="agent">
+          <option value="">All agents</option>
+        </select>
+      </label>
+      <label>Direction
+        <select id="direction">
+          <option value="">All</option>
+          <option value="Incoming">Incoming</option>
+          <option value="Outgoing">Outgoing</option>
+        </select>
+      </label>
+      <label>Status
+        <select id="status">
+          <option value="">All</option>
+          <option value="Connected">Connected</option>
+          <option value="Missed">Missed</option>
+          <option value="Dropped">Dropped</option>
+        </select>
+      </label>
+      <label>Recording
+        <select id="hasRecording">
+          <option value="">All</option>
+          <option value="1">Only with recording</option>
+          <option value="0">Only without</option>
+        </select>
+      </label>
+    </div>
+
+    <!-- RIGHT: Range + Apply + Export -->
+    <div class="row">
+      <button class="btn" id="btnToday">Today</button>
+      <button class="btn" id="btnThisWeek">This Week</button>
+      <button class="btn" id="btnLastWeek">Last Week</button>
+      <button class="btn" id="btnLast7">Last 7d</button>
+      <button class="btn active" id="btnLast30">Last 30d</button>
+      <button class="btn btn-apply" id="btnApply">Apply Filter 🔍</button>
+      <button class="btn btn-export" id="btnExportCSV">Export CSV</button>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  <div id="alertsContainer" style="margin:16px 0"></div>
+
+  <div class="grid kpis" style="margin:16px 0">
+    <div class="card"><h3>Calls (range)</h3><div class="big" id="k_calls">—</div></div>
+    <div class="card"><h3>Connected rate</h3><div class="big" id="k_rate">—</div><div class="muted" id="k_connMiss">—</div></div>
+    <div class="card"><h3>Avg duration (connected)</h3><div class="big" id="k_avg">—</div></div>
+    <div class="card"><h3>Calls today</h3><div class="big" id="k_today">—</div></div>
+  </div>
+
+  <div class="split">
+    <div class="card">
+      <h3>Activity by day</h3>
+      <div id="chartWrap"><canvas id="chartCalls" style="width:100%;height:100%"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Top agents (by talk time)</h3>
+      <table id="tblAgents"><thead><tr>
+        <th>Agent</th><th class="muted">Calls</th><th>Total talk</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <!-- Advanced Analysis -->
+  <div class="card" id="analysisSection" style="margin-top:16px;display:none">
+    <h3>Advanced Analysis</h3>
+    <div class="split">
+      <div>
+        <h4>By Day of Week</h4>
+        <div id="chartDayOfWeekWrap"><canvas id="chartDayOfWeek" style="width:100%;height:250px"></canvas></div>
+      </div>
+      <div>
+        <h4>By Hour of Day</h4>
+        <div id="chartHourOfDayWrap"><canvas id="chartHourOfDay" style="width:100%;height:250px"></canvas></div>
+      </div>
+    </div>
+    <div style="margin-top:16px">
+      <h4>Call Duration Analysis</h4>
+      <div id="durationStats"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>Recent calls</h3>
+    <table id="tblRecent">
+      <thead><tr>
+        <th>When (UTC)</th><th>Agent</th><th>Direction</th><th>Status</th><th>To/From</th><th>Duration</th><th>Recording</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <!-- Pagination controls -->
+    <div class="row" id="recentPager" style="justify-content:space-between;align-items:center;margin-top:8px">
+      <div class="row">
+        <button class="btn" id="btnPrev">‹ Prev</button>
+        <div class="badge" id="pageInfo" style="min-width:120px;text-align:center">Page 1 of 1</div>
+        <button class="btn" id="btnNext">Next ›</button>
+      </div>
+      <label>Rows per page
+        <select id="perPage">
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="muted" style="margin:12px 0">Powered by MightyCall v4 • Enhanced Monitoring Dashboard</div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const qs = (id) => document.getElementById(id);
+  const state = { since:null, until:null, agent:'', direction:'', status:'', hasRecording:'', page:1, perPage:25 };
+  let lastAppliedQS = '';
+  let chart = null;
+  let chartDayOfWeek = null;
+  let chartHourOfDay = null;
+  let agentsPopulated = false;
+  let lastPages = 1; // para habilitar/deshabilitar prev/next
+
+  /* ---------- RANGOS ---------- */
+  function setRange(days) {
+    const today = new Date(); const since = new Date();
+    since.setDate(today.getDate() - (days - 1));
+    qs('since').value = since.toISOString().slice(0, 10);
+    qs('until').value = today.toISOString().slice(0, 10);
+    state.page = 1; // reset paginación al cambiar rango
+    markDirtyIfChanged();
+  }
+  // Semana laboral (Lun–Vie)
+  function setWeekRange(offsetWeeks) {
+    const now = new Date();
+    const day = (now.getDay() + 6) % 7; // 0 = lunes
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - day - 7 * (offsetWeeks || 0));
+    const friday = new Date(monday);
+    friday.setDate(monday.getDate() + 4);
+    const iso = d => d.toISOString().slice(0,10);
+    qs('since').value = iso(monday);
+    qs('until').value = iso(friday);
+    state.page = 1;
+    markDirtyIfChanged();
+  }
+
+  /* ---------- STATE ---------- */
+  function readFilters() {
+    state.since = qs('since').value || '';
+    state.until = qs('until').value || '';
+    state.agent = qs('agent').value || '';
+    state.direction = qs('direction').value || '';
+    state.status = qs('status').value || '';
+    state.hasRecording = qs('hasRecording').value;
+    state.perPage = parseInt(qs('perPage').value || '25', 10);
+    if (isNaN(state.perPage) || state.perPage < 5) state.perPage = 25;
+  }
+  function buildQuery() {
+    const p = new URLSearchParams();
+    if (state.since) p.set('since', state.since);
+    if (state.until) p.set('until', state.until);
+    if (state.agent) p.set('agent', state.agent);
+    if (state.direction) p.set('direction', state.direction);
+    if (state.status) p.set('status', state.status);
+    if (state.hasRecording !== '') p.set('hasRecording', state.hasRecording);
+    // paginación
+    p.set('page', String(state.page));
+    p.set('perPage', String(state.perPage));
+    return p.toString();
+  }
+  function markDirtyIfChanged() {
+    readFilters();
+    const currentQS = buildQuery();
+    const isDirty = currentQS !== lastAppliedQS;
+    qs('btnApply').classList.toggle('dirty', isDirty);
+  }
+  function setRangeActive(btnId) {
+    ['btnToday','btnThisWeek','btnLastWeek','btnLast7','btnLast30'].forEach(id=>{
+      qs(id).classList.toggle('active', id === btnId);
+    });
+  }
+
+  /* ---------- CHART BASE ---------- */
+  function buildDateLabels(fromStr, toStr) {
+    if (!fromStr || !toStr) return ['No data'];
+    const out = [];
+    const from = new Date(fromStr + 'T00:00:00');
+    const to   = new Date(toStr   + 'T00:00:00');
+    for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+      out.push(d.toISOString().slice(0,10));
+    }
+    return out.length ? out : ['No data'];
+  }
+  function renderChart(seriesRaw) {
+    try {
+      const labels = buildDateLabels(qs('since').value, qs('until').value);
+      const s = (seriesRaw && typeof seriesRaw === 'object') ? seriesRaw : {};
+      const incoming = labels.map(d => Number(s[d]?.Incoming  ?? 0));
+      const outgoing = labels.map(d => Number(s[d]?.Outgoing  ?? 0));
+      const connected= labels.map(d => Number(s[d]?.Connected ?? 0));
+      const missed   = labels.map(d => Number(s[d]?.Missed    ?? 0));
+      const canvas = qs('chartCalls');
+      if (!canvas || typeof Chart === 'undefined') return;
+      if (chart) { chart.destroy(); chart = null; }
+      chart = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Incoming',  data: incoming,  borderColor: '#4ade80', backgroundColor: 'rgba(74,222,128,.12)',  borderWidth: 2, pointRadius: 2, tension: 0.35 },
+            { label: 'Outgoing',  data: outgoing, borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,.12)',  borderWidth: 2, pointRadius: 2, tension: 0.35 },
+            { label: 'Connected', data: connected, borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,.12)',  borderWidth: 2, pointRadius: 2, tension: 0.35 },
+            { label: 'Missed',    data: missed,    borderColor: '#f87171', backgroundColor: 'rgba(248,113,113,.12)', borderWidth: 2, pointRadius: 2, tension: 0.35 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true, ticks: { color: '#9aa5c4' }, grid: { color: 'rgba(255,255,255,.06)' } },
+            x: { ticks: { color: '#9aa5c4' }, grid: { display: false } }
+          },
+          plugins: { legend: { labels: { color: '#e9ecf1' } } }
+        }
+      });
+    } catch (err) { console.error('Chart render error:', err); }
+  }
+
+  /* ---------- ADVANCED CHARTS ---------- */
+  function renderAdvancedCharts(analysis) {
+    if (!analysis || typeof Chart === 'undefined') return;
+
+    if (analysis.dayOfWeek) {
+      const dayLabels = Object.keys(analysis.dayOfWeek.calls);
+      const dayCalls = dayLabels.map(day => analysis.dayOfWeek.calls[day]);
+      const canvasDay = qs('chartDayOfWeek');
+      if (chartDayOfWeek) chartDayOfWeek.destroy();
+      chartDayOfWeek = new Chart(canvasDay, {
+        type: 'bar',
+        data: { labels: dayLabels, datasets: [{ label: 'Calls by Day of Week', data: dayCalls, backgroundColor: 'rgba(96,165,250,.6)', borderColor: '#60a5fa', borderWidth: 1 }]},
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true, ticks: { color: '#9aa5c4' }, grid: { color: 'rgba(255,255,255,.06)' } },
+            x: { ticks: { color: '#9aa5c4' }, grid: { display: false } }
+          },
+          plugins: { legend: { labels: { color: '#e9ecf1' } } }
+        }
+      });
+    }
+
+    if (analysis.hourOfDay) {
+      const hourLabels = Object.keys(analysis.hourOfDay.calls).sort((a, b) => parseInt(a) - parseInt(b));
+      const hourCalls = hourLabels.map(hour => analysis.hourOfDay.calls[hour]);
+      const canvasHour = qs('chartHourOfDay');
+      if (chartHourOfDay) chartHourOfDay.destroy();
+      chartHourOfDay = new Chart(canvasHour, {
+        type: 'bar',
+        data: { labels: hourLabels.map(h => `${h}:00`), datasets: [{ label: 'Calls by Hour of Day', data: hourCalls, backgroundColor: 'rgba(74,222,128,.6)', borderColor: '#4ade80', borderWidth: 1 }]},
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true, ticks: { color: '#9aa5c4' }, grid: { color: 'rgba(255,255,255,.06)' } },
+            x: { ticks: { color: '#9aa5c4' }, grid: { display: false } }
+          },
+          plugins: { legend: { labels: { color: '#e9ecf1' } } }
+        }
+      });
+    }
+
+    if (analysis.duration) {
+      const durationStats = qs('durationStats');
+      durationStats.innerHTML = `
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+          <div class="card" style="padding: 12px;">
+            <div class="muted">Min Duration</div>
+            <div class="big">${hms(analysis.duration.min)}</div>
+          </div>
+          <div class="card" style="padding: 12px;">
+            <div class="muted">Max Duration</div>
+            <div class="big">${hms(analysis.duration.max)}</div>
+          </div>
+          <div class="card" style="padding: 12px;">
+            <div class="muted">Avg Duration</div>
+            <div class="big">${hms(analysis.duration.avg)}</div>
+          </div>
+          <div class="card" style="padding: 12px;">
+            <div class="muted">Median Duration</div>
+            <div class="big">${hms(analysis.duration.median)}</div>
+          </div>
+          <div class="card" style="padding: 12px;">
+            <div class="muted">95th Percentile</div>
+            <div class="big">${hms(analysis.duration.p95)}</div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  /* ---------- ALERTS RENDER ---------- */
+  function renderAlerts(alerts) {
+    const container = qs('alertsContainer');
+    container.innerHTML = '';
+    if (!alerts || alerts.length === 0) { container.style.display = 'none'; return; }
+    container.style.display = 'block';
+    alerts.forEach(alert => {
+      const div = document.createElement('div');
+      div.className = `alert alert-${alert.type}`;
+      div.innerHTML = `<div class="alert-title">${alert.title}</div><div>${alert.message}</div>`;
+      container.appendChild(div);
+    });
+  }
+
+  /* ---------- HELPERS ---------- */
+  function hms(ms) {
+    const s = Math.round(ms / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const x = s % 60;
+    return [h, m, x].map(v => String(v).padStart(2, '0')).join(':');
+  }
+
+  /* ---------- LOAD ---------- */
+  async function loadMetrics() {
+    readFilters();
+    const q = buildQuery();
+    const url = 'monitor.php?action=metrics&analysis=1&alerts=1' + (q ? '&' + q : '');
+    try {
+      const res = await fetch(url);
+      const j = await res.json();
+
+      qs('k_calls').textContent = j.totals?.calls ?? '0';
+      qs('k_rate').textContent = (j.totals?.connectedRate ?? 0) + '%';
+      qs('k_connMiss').textContent = `${j.totals?.connected ?? 0} connected • ${j.totals?.missed ?? 0} missed`;
+      qs('k_avg').textContent = j.totals?.avgConnectedDurationHMS ?? '00:00:00';
+      qs('k_today').textContent = j.totals?.callsToday ?? 0;
+
+      renderChart(j.series || {});
+      if (j.analysis) { qs('analysisSection').style.display = 'block'; renderAdvancedCharts(j.analysis); }
+      else { qs('analysisSection').style.display = 'none'; }
+
+      renderAlerts(j.alerts);
+
+      if (!agentsPopulated) {
+        const agentSet = new Set();
+        (j.recent || []).forEach(c => {
+          const name = c.caller?.name || '';
+          const ext  = c.caller?.extension || '';
+          if (name) agentSet.add(name);
+          if (ext)  agentSet.add(ext);
+        });
+        (j.topAgents || []).forEach(a => { if (a.name && a.name !== 'Unknown') agentSet.add(a.name); });
+
+        const agentSelect = qs('agent');
+        Array.from(agentSet).sort().forEach(agent => {
+          const opt = document.createElement('option');
+          opt.value = agent; opt.textContent = agent;
+          agentSelect.appendChild(opt);
+        });
+        agentsPopulated = true;
+      }
+
+      // Top agents
+      const tbodyA = document.querySelector('#tblAgents tbody');
+      tbodyA.innerHTML = '';
+      (j.topAgents || []).forEach(a => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${a.name || '—'}</td><td class="muted">${a.calls || 0}</td><td>${hms(a.durMs || 0)}</td>`;
+        tbodyA.appendChild(tr);
+      });
+
+      // Recent (paginado)
+      const tbodyR = document.querySelector('#tblRecent tbody');
+      tbodyR.innerHTML = '';
+      (j.recent || []).forEach(c => {
+        const when = (c.dateTimeUtc || '').replace('T', ' ').replace('Z', '');
+        const agent = (c.caller?.name) || (c.caller?.extension) || '—';
+        const dir = c.direction || '—';
+        const st  = c.callStatus || '—';
+        const to  = c.called?.[0]?.phone || c.called?.[0]?.name || c.caller?.phone || '—';
+        const dur = hms(c.duration || 0);
+        let rec = '—';
+        if (c.callRecord?.uri) {
+          const url = c.callRecord.uri;
+          rec = `
+            <div style="display:flex;gap:6px;align-items:center;min-height:32px">
+              <audio controls preload="none" style="height:30px;width:180px;font-size:12px">
+                <source src="${url}" type="audio/wav">
+                Your browser does not support audio.
+              </audio>
+              <a href="${url}" download class="badge" style="padding:4px 8px;text-decoration:none;display:inline-flex;align-items:center">↓</a>
+            </div>
+          `;
+        }
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${when}</td><td><span class="badge">${agent}</span></td><td>${dir}</td><td>${st}</td><td>${to}</td><td>${dur}</td><td>${rec}</td>`;
+        tbodyR.appendChild(tr);
+      });
+
+      // Actualiza paginación (puede venir ajustada desde el server)
+      const pag = j.recentPagination || { total: (j.recent||[]).length, page: 1, perPage: state.perPage, pages: 1 };
+      state.page = pag.page; // sincroniza por si el server corrigió
+      lastPages = pag.pages;
+
+      qs('pageInfo').textContent = `Page ${pag.page} of ${pag.pages}`;
+      qs('btnPrev').disabled = (pag.page <= 1);
+      qs('btnNext').disabled = (pag.page >= pag.pages);
+
+      lastAppliedQS = q;
+      qs('btnApply').classList.remove('dirty');
+    } catch (error) {
+      console.error('Error loading metrics:', error);
+      alert('Error loading data. Please try again.');
+    }
+  }
+
+  /* ---------- EXPORT ---------- */
+  function exportData(format) {
+    readFilters();
+    const q = buildQuery();
+    const url = `monitor.php?action=export&format=${format}` + (q ? '&' + q : '');
+    window.open(url, '_blank');
+  }
+
+  /* ====== INIT ====== */
+  setRange(30);
+  setRangeActive('btnLast30');
+
+  ['since','until','agent','direction','status','hasRecording'].forEach(id=>{
+    qs(id).addEventListener('change', () => { state.page = 1; markDirtyIfChanged(); });
+    if (id === 'agent') qs(id).addEventListener('input', () => { state.page = 1; markDirtyIfChanged(); });
+  });
+
+  // rango rápido
+  qs('btnToday').onclick    = () => { const t = new Date().toISOString().slice(0,10); qs('since').value = t; qs('until').value = t; state.page = 1; setRangeActive('btnToday'); markDirtyIfChanged(); };
+  qs('btnThisWeek').onclick = () => { setWeekRange(0); setRangeActive('btnThisWeek'); };
+  qs('btnLastWeek').onclick = () => { setWeekRange(1); setRangeActive('btnLastWeek'); };
+  qs('btnLast7').onclick    = () => { setRange(7);  setRangeActive('btnLast7');  };
+  qs('btnLast30').onclick   = () => { setRange(30); setRangeActive('btnLast30'); };
+
+  // aplicar / exportar
+  qs('btnApply').onclick = () => { state.page = 1; loadMetrics(); };
+  qs('btnExportCSV').onclick = () => exportData('csv');
+
+  // paginación UI
+  qs('btnPrev').onclick = () => { if (state.page > 1) { state.page--; loadMetrics(); } };
+  qs('btnNext').onclick = () => { if (state.page < lastPages) { state.page++; loadMetrics(); } };
+  qs('perPage').addEventListener('change', () => { state.page = 1; loadMetrics(); });
+
+  loadMetrics();
+});
+</script>
+</body>
+</html>
